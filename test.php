@@ -1,6 +1,6 @@
 <?php
 
-ini_set('display_errors', 1);
+ini_set('display_errors',1);
 error_reporting(E_ALL);
 
 require 'includes/class-speedaf-config.php';
@@ -12,29 +12,36 @@ $encryptor = new SpeedafEncryption(
     $config->get('secretKey')
 );
 
-$data = [
-    'name' => 'Ridwan',
-    'phone' => '08169793233'
+$order = [
+    "name" => "Ridwan",
+    "phone" => "08169793233"
 ];
 
-$json = json_encode($data, JSON_UNESCAPED_UNICODE);
+$json = json_encode(
+    $order,
+    JSON_UNESCAPED_UNICODE
+);
 
-$timestamp = round(microtime(true) * 1000);
+$timestamp = $encryptor->generateTimestamp();
 
-echo "<h2>Signature Test</h2>";
+$payload = $encryptor->buildPayload(
+    $timestamp,
+    $json
+);
 
-echo "<strong>Timestamp:</strong><br>";
-echo $timestamp;
+echo "<h2>Speedaf Payload Test</h2>";
+
+echo "<b>Timestamp</b><br>";
+echo htmlspecialchars($timestamp);
 
 echo "<br><br>";
 
-echo "<strong>JSON:</strong><br>";
+echo "<b>Original JSON</b><br>";
 echo htmlspecialchars($json);
 
 echo "<br><br>";
 
-echo "<strong>Signature:</strong><br>";
-echo $encryptor->generateSignature(
-    (string)$timestamp,
-    $json
-);
+echo "<b>Payload</b><br>";
+echo "<pre>";
+echo htmlspecialchars($payload);
+echo "</pre>";
