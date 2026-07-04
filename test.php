@@ -1,6 +1,6 @@
 <?php
 
-ini_set('display_errors',1);
+ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 require 'includes/class-speedaf-config.php';
@@ -13,35 +13,36 @@ $encryptor = new SpeedafEncryption(
 );
 
 $order = [
-    "name" => "Ridwan",
-    "phone" => "08169793233"
+    'name' => 'Ridwan',
+    'phone' => '08169793233',
+    'weight' => 2
 ];
 
-$json = json_encode(
-    $order,
-    JSON_UNESCAPED_UNICODE
-);
+$json = json_encode($order, JSON_UNESCAPED_UNICODE);
 
-$timestamp = $encryptor->generateTimestamp();
+echo "<h2>Round Trip Encryption Test</h2>";
 
-$payload = $encryptor->buildPayload(
-    $timestamp,
-    $json
-);
-
-echo "<h2>Speedaf Payload Test</h2>";
-
-echo "<b>Timestamp</b><br>";
-echo htmlspecialchars($timestamp);
-
-echo "<br><br>";
-
-echo "<b>Original JSON</b><br>";
+echo "<strong>Original:</strong><br>";
 echo htmlspecialchars($json);
 
 echo "<br><br>";
 
-echo "<b>Payload</b><br>";
-echo "<pre>";
-echo htmlspecialchars($payload);
-echo "</pre>";
+$encrypted = $encryptor->encrypt($json);
+
+echo "<strong>Encrypted:</strong><br>";
+echo htmlspecialchars($encrypted);
+
+echo "<br><br>";
+
+$decrypted = $encryptor->decrypt($encrypted);
+
+echo "<strong>Decrypted:</strong><br>";
+echo htmlspecialchars($decrypted);
+
+echo "<br><br>";
+
+if ($json === $decrypted) {
+    echo "<h3 style='color:green;'>✅ SUCCESS - Encryption and Decryption Match</h3>";
+} else {
+    echo "<h3 style='color:red;'>❌ FAILED - Data Does Not Match</h3>";
+}

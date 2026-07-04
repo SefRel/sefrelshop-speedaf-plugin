@@ -45,24 +45,7 @@ class SpeedafEncryption
     /**
     * Encrypt data using DES-CBC
     */
-    public function encrypt(string $plainText): string
-    {
-        $plainText = $this->pkcs5Pad($plainText);
-
-        $encrypted = openssl_encrypt(
-        $plainText,
-        'DES-CBC',
-        $this->secretKey,
-        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
-        $this->iv
-    );
-
-    if ($encrypted === false) {
-        throw new Exception('Encryption failed.');
-    }
-
-    return base64_encode($encrypted);
-    }
+    // Encryption is implemented later in the class. Removed duplicate method.
 
     /**
     * Generate current timestamp in milliseconds
@@ -89,5 +72,63 @@ class SpeedafEncryption
         $payload,
         JSON_UNESCAPED_UNICODE
     );
+    }
+
+    /**
+    * Remove PKCS5 padding
+    */
+    private function pkcs5Unpad(string $text): string
+    {
+    $pad = ord(substr($text, -1));
+
+    if ($pad < 1 || $pad > 8) {
+        return $text;
+    }
+
+    return substr($text, 0, -$pad);
+    }
+
+    /**
+    * Encrypt payload using DES-CBC
+    */
+    public function encrypt(string $plainText): string
+    {
+    $plainText = $this->pkcs5Pad($plainText);
+
+    $encrypted = openssl_encrypt(
+        $plainText,
+        'DES-CBC',
+        $this->secretKey,
+        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+        $this->iv
+    );
+
+    if ($encrypted === false) {
+        throw new Exception('Encryption failed.');
+    }
+
+    return base64_encode($encrypted);
+    }
+
+    /**
+    * Decrypt Speedaf response
+    */
+    public function decrypt(string $encryptedText): string
+    {
+    $decoded = base64_decode($encryptedText);
+
+    $decrypted = openssl_decrypt(
+        $decoded,
+        'DES-CBC',
+        $this->secretKey,
+        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+        $this->iv
+    );
+
+    if ($decrypted === false) {
+        throw new Exception('Decryption failed.');
+    }
+
+    return $this->pkcs5Unpad($decrypted);
     }
 }
