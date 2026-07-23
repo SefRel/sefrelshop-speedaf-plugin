@@ -62,10 +62,13 @@ function sefrelshop_process_order($order_id)
 
     $result = $plugin->processOrder($order);
 
-    update_option(
-        'sefrelshop_last_processing_result',
-        $result
-    );
+   update_option(
+    'sefrelshop_last_processing_result',
+    wp_json_encode(
+        $result,
+        JSON_PRETTY_PRINT
+    )
+);
 
     // Temporary log for debugging.
     error_log(
