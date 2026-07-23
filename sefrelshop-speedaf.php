@@ -10,8 +10,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-die('SEFRELSHOP PLUGIN LOADED');
-
 /*
 |--------------------------------------------------------------------------
 | Load Core Classes
