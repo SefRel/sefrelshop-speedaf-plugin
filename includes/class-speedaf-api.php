@@ -137,4 +137,13 @@ if ($response !== false) {
         'encrypted' => $encrypted
     ];
     }
+
+    /**
+ * Return plugin configuration.
+ */
+    public function getConfig(): SpeedafConfig
+     {
+        return $this->config;
+     }   
+
 }
