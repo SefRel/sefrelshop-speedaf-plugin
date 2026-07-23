@@ -15,41 +15,47 @@ class OrderProcessor
     }
 
     /**
-     * Process a WooCommerce order.
-     *
-     * For now we only simulate the workflow.
+     * Process WooCommerce Order
      */
-    public function process(array $order): array
-{
-    /**
-     * Step 1
-     * Build shipment data.
-     */
-    $shipment = $this->builder->build($order);
+    public function process(array $data): array
+    {
+        /*
+         * Build shipment data.
+         */
+        $shipment = $this->builder->build($data);
 
-    /**
-     * Step 2
-     * Ask the router to select
-     * the best provider.
-     */
-    $provider = $this->router->route($shipment);
+        /*
+         * Ask router to choose
+         * the best provider.
+         */
+        $provider = $this->router->route(
+            $shipment
+        );
 
-    if (!$provider) {
+        if (!$provider) {
+
+            return [
+
+                'success' => false,
+
+                'message' => 'No shipping provider available.'
+
+            ];
+
+        }
+
+        /*
+         * Create shipment.
+         */
+        foreach (['createShipment', 'create', 'ship'] as $method) {
+            if (method_exists($provider, $method)) {
+                return $provider->$method($shipment);
+            }
+        }
 
         return [
-
             'success' => false,
-
-            'message' => 'No shipping provider available.'
-
+            'message' => 'Shipping provider does not support shipment creation.'
         ];
-
     }
-
-    /**
-     * Step 3
-     * Create shipment.
-     */
-    return $provider->createShipment($shipment);
-}
 }

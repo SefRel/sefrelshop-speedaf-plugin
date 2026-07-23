@@ -23,17 +23,49 @@ class SpeedafProvider implements ShippingProvider
     }
 
     /**
-     * Determine whether Speedaf
-     * can handle this shipment.
+ * Determine whether Speedaf
+ * supports this shipment.
+ */
+public function supports(array $shipment): bool
+{
+    /**
+     * Categories not supported
+     * by Speedaf.
      *
-     * For now we'll return true.
-     * Later this will check
-     * category rules and coverage.
+     * We will move this to the
+     * database/settings later.
      */
-    public function supports(array $shipment): bool
-    {
+    $blockedCategories = [
+
+        'food-beverages',
+        'food',
+        'beverages',
+        'fresh-food',
+        'perishable',
+        'frozen-food'
+
+    ];
+
+    if (empty($shipment['categories'])) {
         return true;
     }
+
+    foreach ($shipment['categories'] as $category) {
+
+        if (
+            in_array(
+                strtolower($category),
+                $blockedCategories,
+                true
+            )
+        ) {
+            return false;
+        }
+
+    }
+
+    return true;
+}
 
     /**
      * Create a shipment in Speedaf.
