@@ -49,3 +49,4 @@ function sefrelshop_process_order($order_id)
         "SefrelShop: Processing Order #{$order_id}"
     );
 }
+error_log('Git deployment test');
