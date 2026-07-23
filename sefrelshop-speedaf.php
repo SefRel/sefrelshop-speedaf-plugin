@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SefrelShop Speedaf Shipping
  * Description: Speedaf Shipping Integration for WooCommerce & Dokan
- * Version: 1.6.0
+ * Version: 0.6.0
  * Author: Sefrel Technologies Ltd.
  */
 
