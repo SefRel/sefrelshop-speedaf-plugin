@@ -3,6 +3,7 @@
 class SpeedafApi
 {
     private SpeedafConfig $config;
+
     private SpeedafEncryption $encryption;
 
     public function __construct(
@@ -13,137 +14,207 @@ class SpeedafApi
         $this->encryption = $encryption;
     }
 
-
     /**
-    * Build full API URL
-    */
+     * Build full API URL.
+     */
     private function buildUrl(
-    string $endpoint,
-    string $timestamp
-    ): string
-    {
-    return sprintf(
-        "%s%s?appCode=%s&timestamp=%s",
-        rtrim($this->config->getBaseUrl(), '/'),
-        $endpoint,
-        $this->config->get('appCode'),
-        $timestamp
-    );
+        string $endpoint,
+        string $timestamp
+    ): string {
+
+        return sprintf(
+            "%s%s?appCode=%s&timestamp=%s",
+            rtrim($this->config->getBaseUrl(), '/'),
+            $endpoint,
+            $this->config->get('appCode'),
+            $timestamp
+        );
+
     }
 
-
     /**
- * Send POST request to Speedaf
- */
-    public function post(string $endpoint, array $data)
-    {
-        $timestamp = $this->encryption->generateTimestamp();
+     * Send POST request to Speedaf.
+     */
+    public function post(
+        string $endpoint,
+        array $data
+    ): array {
 
-        $json = json_encode(
-    $data,
-    JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
-    );
+        $timestamp = $this->encryption
+            ->generateTimestamp();
 
-        $payload = $this->encryption->buildPayload(
-            $timestamp,
-            $json
-        );
-
-        $encrypted = $this->encryption->encrypt(
-            $payload
-        );
-
-        $url = $this->buildUrl($endpoint, $timestamp);
-
-        $ch = curl_init();
-
-curl_setopt_array($ch, [
-
-    CURLOPT_URL => $url,
-
-    CURLOPT_RETURNTRANSFER => true,
-
-    CURLOPT_POST => true,
-
-    CURLOPT_POSTFIELDS => $encrypted,
-
-    CURLOPT_HTTPHEADER => [
-
-        'Content-Type: application/json',
-
-        'Content-Length: ' . strlen($encrypted)
-
-    ],
-
-    CURLOPT_SSL_VERIFYPEER => false,
-
-    CURLOPT_SSL_VERIFYHOST => false,
-
-    CURLOPT_TIMEOUT => 30
-
-    ]);
-
-    $response = curl_exec($ch);
-
-    $decryptedResponse = null;
-
-if ($response !== false) {
-
-    $decoded = json_decode($response, true);
-
-    if (
-        isset($decoded['success']) &&
-        $decoded['success'] === true &&
-        !empty($decoded['data'])
-    ) {
-
+        /**
+         * Convert payload to JSON.
+         */
         try {
 
-            $decryptedResponse = $this->encryption->decrypt(
-                $decoded['data']
+            $json = json_encode(
+                $data,
+                JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
             );
 
-        } catch (Exception $e) {
+        } catch (JsonException $e) {
 
-            $decryptedResponse = 'Decryption failed: ' . $e->getMessage();
+            return [
+
+                'status' => 0,
+
+                'error' => $e->getMessage(),
+
+                'response' => null
+
+            ];
 
         }
 
-    }
+        /**
+         * Encrypt request payload.
+         */
+        $payload = $this->encryption
+            ->buildPayload(
+                $timestamp,
+                $json
+            );
 
-}
+        $encrypted = $this->encryption
+            ->encrypt($payload);
 
-    if ($response === false) {
-    $error = curl_error($ch);
-    } else {
-    $error = null;
-    }
+        $url = $this->buildUrl(
+            $endpoint,
+            $timestamp
+        );
 
-    $status = curl_getinfo(
-    $ch,
-    CURLINFO_HTTP_CODE
-    );
+        /**
+         * Initialise cURL.
+         */
+        $ch = curl_init();
 
-    curl_close($ch);
+        curl_setopt_array($ch, [
 
-    return [
-        'status' => $status,
-        'error' => $error,
-        'response' => $response,
-        'decrypted' => $decryptedResponse,
-        'url' => $url,
-        'json' => $json,
-        'payload' => $payload,
-        'encrypted' => $encrypted
-    ];
+            CURLOPT_URL => $url,
+
+            CURLOPT_RETURNTRANSFER => true,
+
+            CURLOPT_POST => true,
+
+            CURLOPT_POSTFIELDS => $encrypted,
+
+            CURLOPT_HTTPHEADER => [
+
+                'Content-Type: application/json',
+
+                'Content-Length: ' . strlen($encrypted)
+
+            ],
+
+            CURLOPT_SSL_VERIFYPEER => false,
+
+            CURLOPT_SSL_VERIFYHOST => false,
+
+            CURLOPT_TIMEOUT => 30
+
+        ]);
+
+        /**
+         * Execute request.
+         */
+        $response = curl_exec($ch);
+
+        $curlError = curl_error($ch);
+
+        $curlErrNo = curl_errno($ch);
+
+        $status = curl_getinfo(
+            $ch,
+            CURLINFO_HTTP_CODE
+        );
+
+        curl_close($ch);
+
+        /**
+         * Attempt to decrypt response.
+         */
+        $decryptedResponse = null;
+
+        if ($response !== false) {
+
+            $decoded = json_decode(
+                $response,
+                true
+            );
+
+            if (
+                isset($decoded['success']) &&
+                $decoded['success'] === true &&
+                !empty($decoded['data'])
+            ) {
+
+                try {
+
+                    $decryptedResponse =
+                        $this->encryption
+                            ->decrypt(
+                                $decoded['data']
+                            );
+
+                } catch (Exception $e) {
+
+                    $decryptedResponse =
+
+                        'Decryption failed: '
+
+                        . $e->getMessage();
+
+                }
+
+            }
+
+        }
+
+        /**
+         * Standard response.
+         */
+        $result = [
+
+            'status' => $status,
+
+            'error' => $curlError,
+
+            'curl_errno' => $curlErrNo,
+
+            'response' => $response,
+
+            'decrypted' => $decryptedResponse
+
+        ];
+
+        /**
+         * Only expose debugging data
+         * during development.
+         */
+        if (
+            defined('WP_DEBUG') &&
+            WP_DEBUG
+        ) {
+
+            $result['url'] = $url;
+
+            $result['json'] = $json;
+
+            $result['payload'] = $payload;
+
+            $result['encrypted'] = $encrypted;
+
+        }
+
+        return $result;
     }
 
     /**
- * Return plugin configuration.
- */
+     * Return plugin configuration.
+     */
     public function getConfig(): SpeedafConfig
-     {
+    {
         return $this->config;
-     }   
-
+    }
 }
