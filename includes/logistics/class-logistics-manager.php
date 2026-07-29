@@ -30,7 +30,7 @@ class LogisticsManager
      * Return every provider that supports the order.
      */
     public function getSupportedProviders(
-        array $order
+        array $shipment
     ): array {
 
         $supported = [];
