@@ -15,18 +15,21 @@ class OrderProcessor
     }
 
     /**
-     * Process WooCommerce Order
+     * Process a WooCommerce order.
      */
-    public function process(array $data): array
-    {
-        /*
-         * Build shipment data.
+    public function process(
+        array $data
+    ): array {
+
+        /**
+         * Step 1:
+         * Build our standard shipment.
          */
         $shipment = $this->builder->build($data);
 
-        /*
-         * Ask router to choose
-         * the best provider.
+        /**
+         * Step 2:
+         * Select the best provider.
          */
         $provider = $this->router->route(
             $shipment
@@ -44,18 +47,38 @@ class OrderProcessor
 
         }
 
-        /*
-         * Create shipment.
+        /**
+         * Step 3:
+         * Create order.
          */
-        foreach (['createShipment', 'create', 'ship'] as $method) {
-            if (method_exists($provider, $method)) {
-                return $provider->$method($shipment);
-            }
+        if (!method_exists($provider, 'createOrder')) {
+
+            return [
+
+                'success' => false,
+
+                'message' => 'Selected shipping provider cannot create orders.'
+
+            ];
+
         }
 
+        $result = $provider->createOrder($shipment);
+
+        /**
+         * Step 4:
+         * Return everything.
+         */
         return [
-            'success' => false,
-            'message' => 'Shipping provider does not support shipment creation.'
+
+            'success' => true,
+
+            'provider' => $provider->getName(),
+
+            'shipment' => $shipment,
+
+            'result' => $result
+
         ];
     }
 }

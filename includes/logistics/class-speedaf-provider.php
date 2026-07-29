@@ -70,6 +70,14 @@ public function supports(array $shipment): bool
 
 
     /**
+     * Create an order with Speedaf.
+    */
+    public function createOrder(array $order)
+    {
+    return $this->createShipment($order);
+    }
+
+    /**
      * Create a shipment in Speedaf.
      */
     public function createShipment(array $shipment): array
