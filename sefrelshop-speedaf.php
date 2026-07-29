@@ -35,22 +35,23 @@ require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
 |--------------------------------------------------------------------------
 */
 
-add_action(
-    'woocommerce_order_status_processing',
-    'sefrelshop_process_order',
-    10,
-    1
-);
-
 /**
  * Runs whenever an order
  * changes to Processing.
  */
+if (defined('ABSPATH') && function_exists('add_action')) {
+    add_action(
+        'woocommerce_order_status_processing',
+        'sefrelshop_process_order',
+        10,
+        1
+    );
+}
 
-function sefrelshop_process_order($order_id)
-{
-    if (function_exists('update_option')) {
+if (!function_exists('sefrelshop_process_order')) {
+    function sefrelshop_process_order($order_id)
+    {
         update_option('step_1', 'Hook Fired');
+        return;
     }
-    return;
 }

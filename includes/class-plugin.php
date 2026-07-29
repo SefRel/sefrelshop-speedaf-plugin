@@ -35,7 +35,10 @@ class SefrelShopPlugin
         |--------------------------------------------------------------------------
         */
 
-        $speedaf = new SpeedafProvider($api);
+        $speedaf = new SpeedafProvider(
+            $api,
+            $config
+        );
 
         /*
         |--------------------------------------------------------------------------
