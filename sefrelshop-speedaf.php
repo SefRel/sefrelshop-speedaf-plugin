@@ -65,6 +65,8 @@ if (!function_exists('sefrelshop_process_order')) {
         $plugin = new SefrelShopPlugin();
 
         update_option('step_3', 'Plugin Created');
+
+        update_option('step_4', 'Processing Order: #' . $order->get_id());
     }
 
 }
