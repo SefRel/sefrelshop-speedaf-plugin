@@ -49,6 +49,7 @@ if (defined('ABSPATH') && function_exists('add_action')) {
 }
 
 if (!function_exists('sefrelshop_process_order')) {
+
     function sefrelshop_process_order($order_id)
     {
         update_option('step_1', 'Hook Fired');
@@ -56,17 +57,34 @@ if (!function_exists('sefrelshop_process_order')) {
         $order = wc_get_order($order_id);
 
         if (!$order) {
-            update_option('step_2', 'Order NOT loaded');
+
+            update_option(
+                'step_2',
+                'Order NOT loaded'
+            );
+
             return;
+
         }
 
-        update_option('step_2', 'Order Loaded: #' . $order->get_id());
+        update_option(
+            'step_2',
+            'Order Loaded: #' . $order->get_id()
+        );
 
         $plugin = new SefrelShopPlugin();
 
-        update_option('step_3', 'Plugin Created');
+        update_option(
+            'step_3',
+            'Plugin Created'
+        );
 
-        update_option('step_4', $result);
+        $result = $plugin->processOrder($order);
+
+        update_option(
+            'step_4',
+         wp_json_encode($result, JSON_PRETTY_PRINT)
+        );
     }
 
 }
