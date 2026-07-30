@@ -83,7 +83,7 @@ if (!function_exists('sefrelshop_process_order')) {
 
         update_option(
             'step_4',
-         wp_json_encode($result, JSON_PRETTY_PRINT)
+         json_encode($result, JSON_PRETTY_PRINT)
         );
     }
 
