@@ -17,9 +17,9 @@ class OrderProcessor
     /**
      * Process a WooCommerce order.
      */
-    public function process(
-        array $data
-    ): array {
+    public function process(array $data): array
+    {
+        update_option('processor_step_1', 'Started');
 
         /**
          * Step 1:
@@ -27,24 +27,24 @@ class OrderProcessor
          */
         $shipment = $this->builder->build($data);
 
+        update_option('processor_step_2', 'Shipment Built');
+
         /**
          * Step 2:
          * Select the best provider.
          */
-        $provider = $this->router->route(
-            $shipment
-        );
+        $provider = $this->router->route($shipment);
+
+        update_option('processor_step_3', 'Router Finished');
 
         if (!$provider) {
 
+            update_option('processor_step_4', 'No Provider');
+
             return [
-
                 'success' => false,
-
                 'message' => 'No shipping provider available.'
-
             ];
-
         }
 
         /**
@@ -54,31 +54,18 @@ class OrderProcessor
         if (!method_exists($provider, 'createOrder')) {
 
             return [
-
                 'success' => false,
-
                 'message' => 'Selected shipping provider cannot create orders.'
-
             ];
-
         }
 
-        $result = $provider->createOrder($shipment);
+        update_option(
+            'processor_step_5',
+            'Provider: ' . $provider->getName()
+        );
 
-        /**
-         * Step 4:
-         * Return everything.
-         */
         return [
-
-            'success' => true,
-
-            'provider' => $provider->getName(),
-
-            'shipment' => $shipment,
-
-            'result' => $result
-
+            'success' => true
         ];
     }
 }
