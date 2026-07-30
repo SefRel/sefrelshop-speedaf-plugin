@@ -64,7 +64,6 @@ if (!function_exists('sefrelshop_process_order')) {
             );
 
             return;
-
         }
 
         update_option(
@@ -83,8 +82,7 @@ if (!function_exists('sefrelshop_process_order')) {
 
         update_option(
             'step_4',
-         json_encode($result, JSON_PRETTY_PRINT)
+            wp_json_encode($result)
         );
     }
-
 }
