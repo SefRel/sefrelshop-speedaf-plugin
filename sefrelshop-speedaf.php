@@ -48,10 +48,36 @@ if (defined('ABSPATH') && function_exists('add_action')) {
     );
 }
 
-if (!function_exists('sefrelshop_process_order')) {
-    function sefrelshop_process_order($order_id)
-    {
-        update_option('step_1', 'Hook Fired');
+function sefrelshop_process_order($order_id)
+{
+    error_log("[SefrelGO] Hook Fired for Order #{$order_id}");
+
+    // Load WooCommerce order
+    $order = wc_get_order($order_id);
+
+    if (!$order) {
+
+        error_log("[SefrelGO] Order not found.");
+
         return;
+
     }
+
+    error_log("[SefrelGO] WooCommerce Order Loaded");
+
+    // Create plugin instance
+    $plugin = new SefrelShopPlugin();
+
+    error_log("[SefrelGO] Plugin Initialised");
+
+    // Process order
+    $result = $plugin->processOrder($order);
+
+    // Save result for inspection
+    update_option(
+        'sefrelshop_last_result',
+        $result
+    );
+
+    error_log("[SefrelGO] Processing Complete");
 }
