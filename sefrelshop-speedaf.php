@@ -50,10 +50,25 @@ if (defined('ABSPATH') && function_exists('add_action')) {
 
 if (!function_exists('sefrelshop_process_order')) {
     function sefrelshop_process_order($order_id)
-    {
+{
+    update_option('step_1', 'Hook Fired');
+
+    $order = wc_get_order($order_id);
+
+    if (!$order) {
+
         update_option(
-            'sefrelshop_hook_test',
-            'Order #' . $order_id . ' fired at ' . current_time('mysql')
+            'step_2',
+            'Order NOT loaded'
         );
+
+        return;
+
     }
+
+    update_option(
+        'step_2',
+        'Order Loaded'
+    );
+}
 }
