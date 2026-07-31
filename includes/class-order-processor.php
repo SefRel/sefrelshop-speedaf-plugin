@@ -19,25 +19,25 @@ class OrderProcessor
      */
     public function process(array $data): array
     {
-        update_option('processor_step_1', 'Started');
+        $this->setOption('processor_step_1', 'Started');
 
         /*
          * Build shipment.
          */
         $shipment = $this->builder->build($data);
 
-        update_option('processor_step_2', 'Shipment Built');
+        $this->setOption('processor_step_2', 'Shipment Built');
 
         /*
          * Select provider.
          */
         $provider = $this->router->route($shipment);
 
-        update_option('processor_step_3', 'Router Finished');
+        $this->setOption('processor_step_3', 'Router Finished');
 
         if (!$provider) {
 
-            update_option(
+            $this->setOption(
                 'processor_step_4',
                 'No Provider'
             );
@@ -48,7 +48,7 @@ class OrderProcessor
             ];
         }
 
-        update_option(
+        $this->setOption(
             'processor_step_5',
             'Provider: ' . $provider->getName()
         );
@@ -62,5 +62,12 @@ class OrderProcessor
             'provider' => $provider->getName(),
             'shipment' => $shipment
         ];
+    }
+
+    private function setOption(string $name, mixed $value): void
+    {
+        if (function_exists('update_option')) {
+            update_option($name, $value);
+        }
     }
 }

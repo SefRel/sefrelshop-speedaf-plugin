@@ -48,12 +48,11 @@ class OrderBuilder
             /**
              * Get product categories.
              */
-            $terms = get_the_terms(
-                $product->get_id(),
-                'product_cat'
-            );
+            $terms = function_exists('get_the_terms')
+                ? get_the_terms($product->get_id(), 'product_cat')
+                : [];
 
-            if (!empty($terms) && !is_wp_error($terms)) {
+            if (!empty($terms) && (!function_exists('is_wp_error') || !is_wp_error($terms))) {
 
                 foreach ($terms as $term) {
 
