@@ -19,7 +19,7 @@ class LogisticsManager
     }
 
     /**
-     * Return every registered provider.
+     * Return every registered providler.
      */
     public function getProviders(): array
     {
@@ -37,7 +37,7 @@ class LogisticsManager
 
         foreach ($this->providers as $provider) {
 
-            if ($provider->supports($order)) {
+            if ($provider->supports($shipment)) {
                 $supported[] = $provider;
             }
 
