@@ -27,7 +27,7 @@ class LogisticsManager
     }
 
     /**
-     * Return every provider that supports the order.
+     * Return every provider that supportss the order.
      */
     public function getSupportedProviders(
         array $shipment
