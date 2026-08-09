@@ -22,8 +22,162 @@ class OrderBuilder
 
         $items = [];
         $categories = [];
-        $totalWeight = 0;
-        $totalValue = 0;
+        $totalWeight = 0.0;
+        $totalValue = 0.0;
+
+        /*
+         * --------------------------------------------------------------
+         * Customer information
+         * --------------------------------------------------------------
+         */
+
+        $customerName = trim(
+            $order->get_shipping_first_name() . ' ' .
+            $order->get_shipping_last_name()
+        );
+
+        if (empty($customerName)) {
+            $customerName = trim(
+                $order->get_billing_first_name() . ' ' .
+                $order->get_billing_last_name()
+            );
+        }
+
+        $customerPhone = trim(
+            $order->get_billing_phone()
+        );
+
+        $customerEmail = trim(
+            $order->get_billing_email()
+        );
+
+        /*
+         * --------------------------------------------------------------
+         * Shipping address
+         * --------------------------------------------------------------
+         */
+
+        $shippingAddress = trim(
+            $order->get_shipping_address_1()
+        );
+
+        if (empty($shippingAddress)) {
+            $shippingAddress = trim(
+                $order->get_billing_address_1()
+            );
+        }
+
+        $shippingAddress2 = trim(
+            $order->get_shipping_address_2()
+        );
+
+        if (!empty($shippingAddress2)) {
+            $shippingAddress .= ' ' . $shippingAddress2;
+        }
+
+        if (empty($shippingAddress)) {
+            $shippingAddress = trim(
+                $order->get_billing_address_1()
+            );
+
+            $billingAddress2 = trim(
+                $order->get_billing_address_2()
+            );
+
+            if (!empty($billingAddress2)) {
+                $shippingAddress .= ' ' . $billingAddress2;
+            }
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Location
+         * --------------------------------------------------------------
+         */
+
+        $shippingCity = trim(
+            $order->get_shipping_city()
+        );
+
+        if (empty($shippingCity)) {
+            $shippingCity = trim(
+                $order->get_billing_city()
+            );
+        }
+
+        $shippingState = trim(
+            $order->get_shipping_state()
+        );
+
+        /*
+         * Speedaf requires a state.
+         *
+         * If the shipping state is empty,
+         * attempt to use the billing state.
+         */
+        if (empty($shippingState)) {
+            $shippingState = trim(
+                $order->get_billing_state()
+            );
+        }
+
+        $shippingCountry = strtoupper(
+            trim($order->get_shipping_country())
+        );
+
+        if (empty($shippingCountry)) {
+            $shippingCountry = strtoupper(
+                trim($order->get_billing_country())
+            );
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Validate required shipment information
+         * --------------------------------------------------------------
+         */
+
+        if (empty($customerName)) {
+            throw new InvalidArgumentException(
+                'Customer name is required before creating a shipment.'
+            );
+        }
+
+        if (empty($customerPhone)) {
+            throw new InvalidArgumentException(
+                'Customer phone number is required before creating a shipment.'
+            );
+        }
+
+        if (empty($shippingAddress)) {
+            throw new InvalidArgumentException(
+                'Shipping address is required before creating a shipment.'
+            );
+        }
+
+        if (empty($shippingCity)) {
+            throw new InvalidArgumentException(
+                'Shipping city is required before creating a shipment.'
+            );
+        }
+
+        if (empty($shippingState)) {
+            throw new InvalidArgumentException(
+                'Shipping state is required before creating a shipment.'
+            );
+        }
+
+        if (empty($shippingCountry)) {
+            throw new InvalidArgumentException(
+                'Shipping country is required before creating a shipment.'
+            );
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Build order items
+         * --------------------------------------------------------------
+         */
 
         foreach ($order->get_items() as $item) {
 
@@ -35,32 +189,64 @@ class OrderBuilder
 
             $quantity = (int) $item->get_quantity();
 
-            $weight = (float) $product->get_weight();
-            if ($weight <= 0) {
-                $weight = 0.5; // Default weight if not set
+            if ($quantity <= 0) {
+                continue;
             }
+
+            /*
+             * Product weight.
+             *
+             * WooCommerce stores product weight
+             * according to the store's configured unit.
+             */
+            $weight = (float) $product->get_weight();
+
+            /*
+             * Temporary fallback.
+             *
+             * We will later replace this with
+             * proper product/shipping validation.
+             */
+            if ($weight <= 0) {
+                $weight = 0.5;
+            }
+
             $length = (float) $product->get_length();
             $width  = (float) $product->get_width();
             $height = (float) $product->get_height();
 
             $price = (float) $item->get_total();
 
-            /**
-             * Get product categories.
+            /*
+             * ----------------------------------------------------------
+             * Product categories
+             * ----------------------------------------------------------
              */
-            $terms = function_exists('get_the_terms')
-                ? get_the_terms($product->get_id(), 'product_cat')
-                : [];
 
-            if (!empty($terms) && (!function_exists('is_wp_error') || !is_wp_error($terms))) {
+            $terms = get_the_terms(
+                $product->get_id(),
+                'product_cat'
+            );
+
+            if (
+                !empty($terms) &&
+                !is_wp_error($terms)
+            ) {
 
                 foreach ($terms as $term) {
 
-                    $categories[] = strtolower($term->slug);
+                    $categories[] = strtolower(
+                        $term->slug
+                    );
 
                 }
-
             }
+
+            /*
+             * ----------------------------------------------------------
+             * Shipment item
+             * ----------------------------------------------------------
+             */
 
             $items[] = [
 
@@ -84,7 +270,9 @@ class OrderBuilder
 
                 'goodsValue' => $price,
 
-                'currencyType' => function_exists('get_woocommerce_currency')
+                'currencyType' => function_exists(
+                    'get_woocommerce_currency'
+                )
                     ? get_woocommerce_currency()
                     : 'NGN',
 
@@ -96,16 +284,36 @@ class OrderBuilder
 
             ];
 
-            $totalWeight += ($weight * $quantity);
-            $totalValue += $price;
+            $totalWeight += (
+                $weight * $quantity
+            );
 
+            $totalValue += $price;
         }
 
-        // Ensure we have a customer name
-        $customerName = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+        /*
+         * --------------------------------------------------------------
+         * Validate items
+         * --------------------------------------------------------------
+         */
 
-        // Ensure we have a customer address
-        $customerAddress = trim($order->get_billing_address_1() . ' ' . $order->get_billing_address_2());
+        if (empty($items)) {
+            throw new InvalidArgumentException(
+                'The order contains no valid shippable products.'
+            );
+        }
+
+        if ($totalWeight <= 0) {
+            throw new InvalidArgumentException(
+                'Shipment weight must be greater than zero.'
+            );
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Return standardized shipment
+         * --------------------------------------------------------------
+         */
 
         return [
 
@@ -115,17 +323,17 @@ class OrderBuilder
 
             'customer_name' => $customerName,
 
-            'customer_phone' => $order->get_billing_phone(),
+            'customer_phone' => $customerPhone,
 
-            'customer_email' => $order->get_billing_email(),
+            'customer_email' => $customerEmail,
 
-            'shipping_address' => $customerAddress,
+            'shipping_address' => $shippingAddress,
 
-            'shipping_city' => $order->get_shipping_city(),
+            'shipping_city' => $shippingCity,
 
-            'shipping_state' => $order->get_shipping_state(),
+            'shipping_state' => $shippingState,
 
-            'shipping_country' => $order->get_shipping_country(),
+            'shipping_country' => $shippingCountry,
 
             'items' => $items,
 
@@ -133,7 +341,9 @@ class OrderBuilder
 
             'total_value' => $totalValue,
 
-            'categories' => array_unique($categories)
+            'categories' => array_values(
+                array_unique($categories)
+            )
 
         ];
     }
