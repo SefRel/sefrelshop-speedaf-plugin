@@ -26,10 +26,9 @@ class SpeedafApi
             "%s%s?appCode=%s&timestamp=%s",
             rtrim($this->config->getBaseUrl(), '/'),
             $endpoint,
-            $this->config->get('appCode'),
-            $timestamp
+            rawurlencode($this->config->get('appCode')),
+            rawurlencode($timestamp)
         );
-
     }
 
     /**
@@ -40,12 +39,32 @@ class SpeedafApi
         array $data
     ): array {
 
-        $timestamp = $this->encryption
-            ->generateTimestamp();
-
-        /**
-         * Convert payload to JSON.
+        /*
+         * --------------------------------------------------------------
+         * Step 1: Generate timestamp
+         * --------------------------------------------------------------
          */
+
+        try {
+
+            $timestamp = $this->encryption->generateTimestamp();
+
+        } catch (Throwable $e) {
+
+            return [
+                'success' => false,
+                'status' => 0,
+                'error' => 'Timestamp generation failed: ' . $e->getMessage(),
+                'response' => null
+            ];
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Step 2: Convert shipment data to JSON
+         * --------------------------------------------------------------
+         */
+
         try {
 
             $json = json_encode(
@@ -53,41 +72,87 @@ class SpeedafApi
                 JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
             );
 
-        } catch (JsonException $e) {
+        } catch (Throwable $e) {
 
             return [
-
+                'success' => false,
                 'status' => 0,
-
-                'error' => $e->getMessage(),
-
+                'error' => 'JSON encoding failed: ' . $e->getMessage(),
                 'response' => null
-
             ];
-
         }
 
-        /**
-         * Encrypt request payload.
+        /*
+         * --------------------------------------------------------------
+         * Step 3: Build Speedaf signed payload
+         * --------------------------------------------------------------
          */
-        $payload = $this->encryption
-            ->buildPayload(
+
+        try {
+
+            $payload = $this->encryption->buildPayload(
                 $timestamp,
                 $json
             );
 
-        $encrypted = $this->encryption
-            ->encrypt($payload);
+            $encrypted = $this->encryption->encrypt(
+                $payload
+            );
+
+        } catch (Throwable $e) {
+
+            return [
+                'success' => false,
+                'status' => 0,
+                'error' => 'Encryption failed: ' . $e->getMessage(),
+                'response' => null
+            ];
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Step 4: Build URL
+         * --------------------------------------------------------------
+         */
 
         $url = $this->buildUrl(
             $endpoint,
             $timestamp
         );
 
-        /**
-         * Initialise cURL.
+        /*
+         * --------------------------------------------------------------
+         * Step 5: Check cURL
+         * --------------------------------------------------------------
          */
+
+        if (!function_exists('curl_init')) {
+
+            return [
+                'success' => false,
+                'status' => 0,
+                'error' => 'cURL is not available on this server.',
+                'response' => null
+            ];
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Step 6: Send request
+         * --------------------------------------------------------------
+         */
+
         $ch = curl_init();
+
+        if ($ch === false) {
+
+            return [
+                'success' => false,
+                'status' => 0,
+                'error' => 'Unable to initialise cURL.',
+                'response' => null
+            ];
+        }
 
         curl_setopt_array($ch, [
 
@@ -107,74 +172,134 @@ class SpeedafApi
 
             ],
 
+            /*
+             * Keep these aligned with the
+             * Speedaf API documentation for now.
+             *
+             * We can harden TLS after the
+             * sandbox connection is confirmed.
+             */
             CURLOPT_SSL_VERIFYPEER => false,
 
             CURLOPT_SSL_VERIFYHOST => false,
+
+            CURLOPT_CONNECTTIMEOUT => 10,
 
             CURLOPT_TIMEOUT => 30
 
         ]);
 
-        /**
-         * Execute request.
-         */
         $response = curl_exec($ch);
 
         $curlError = curl_error($ch);
 
         $curlErrNo = curl_errno($ch);
 
-        $status = curl_getinfo(
+        $status = (int) curl_getinfo(
             $ch,
             CURLINFO_HTTP_CODE
         );
 
         curl_close($ch);
 
-        /**
-         * Attempt to decrypt response.
+        /*
+         * --------------------------------------------------------------
+         * Step 7: Handle cURL failure
+         * --------------------------------------------------------------
          */
-        $decryptedResponse = null;
 
-        if ($response !== false) {
+        if ($response === false) {
 
-            $decoded = json_decode(
-                $response,
-                true
-            );
+            return [
 
-            if (
-                isset($decoded['success']) &&
-                $decoded['success'] === true &&
-                !empty($decoded['data'])
-            ) {
+                'success' => false,
 
-                try {
+                'status' => $status,
 
-                    $decryptedResponse =
-                        $this->encryption
-                            ->decrypt(
-                                $decoded['data']
-                            );
+                'error' => $curlError ?: 'Unknown cURL error.',
 
-                } catch (Exception $e) {
+                'curl_errno' => $curlErrNo,
 
-                    $decryptedResponse =
+                'response' => null
 
-                        'Decryption failed: '
-
-                        . $e->getMessage();
-
-                }
-
-            }
-
+            ];
         }
 
-        /**
-         * Standard response.
+        /*
+         * --------------------------------------------------------------
+         * Step 8: Decode Speedaf response
+         * --------------------------------------------------------------
          */
+
+        $decoded = json_decode(
+            $response,
+            true
+        );
+
+        /*
+         * If Speedaf returns something that
+         * isn't JSON, preserve the raw response.
+         */
+        if (!is_array($decoded)) {
+
+            return [
+
+                'success' => false,
+
+                'status' => $status,
+
+                'error' => 'Speedaf returned a non-JSON response.',
+
+                'curl_errno' => $curlErrNo,
+
+                'response' => $response,
+
+                'decrypted' => null
+
+            ];
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Step 9: Attempt to decrypt successful response
+         * --------------------------------------------------------------
+         */
+
+        $decryptedResponse = null;
+
+        if (
+            isset($decoded['success']) &&
+            $decoded['success'] === true &&
+            !empty($decoded['data'])
+        ) {
+
+            try {
+
+                $decryptedResponse =
+                    $this->encryption->decrypt(
+                        $decoded['data']
+                    );
+
+            } catch (Throwable $e) {
+
+                $decryptedResponse =
+                    'Decryption failed: '
+                    . $e->getMessage();
+            }
+        }
+
+        /*
+         * --------------------------------------------------------------
+         * Step 10: Return standard response
+         * --------------------------------------------------------------
+         */
+
         $result = [
+
+            'success' => (
+                isset($decoded['success'])
+                && $decoded['success'] === true
+            ),
 
             'status' => $status,
 
@@ -184,14 +309,18 @@ class SpeedafApi
 
             'response' => $response,
 
+            'decoded' => $decoded,
+
             'decrypted' => $decryptedResponse
 
         ];
 
-        /**
-         * Only expose debugging data
-         * during development.
+        /*
+         * --------------------------------------------------------------
+         * Development diagnostics
+         * --------------------------------------------------------------
          */
+
         if (
             defined('WP_DEBUG') &&
             WP_DEBUG
@@ -204,7 +333,6 @@ class SpeedafApi
             $result['payload'] = $payload;
 
             $result['encrypted'] = $encrypted;
-
         }
 
         return $result;
