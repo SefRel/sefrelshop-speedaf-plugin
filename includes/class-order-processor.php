@@ -19,260 +19,155 @@ class OrderProcessor
      */
     public function process(array $data): array
     {
-        update_option(
-            'processor_step_1',
-            'Started'
-        );
-
-        /*
-         * --------------------------------------------------------------
-         * Step 1: Build shipment
-         * --------------------------------------------------------------
+        /**
+         * Step 1:
+         * Build our standard shipment.
          */
+        $shipment = $this->builder->build($data);
 
-        try {
-
-            $shipment = $this->builder->build($data);
-
-        } catch (Throwable $e) {
-
-            update_option(
-                'processor_step_2',
-                'Shipment Build Failed: ' . $e->getMessage()
-            );
-
-            return [
-
-                'success' => false,
-
-                'message' => 'Unable to build shipment.',
-
-                'error' => $e->getMessage()
-
-            ];
-        }
-
-        update_option(
-            'processor_step_2',
-            'Shipment Built'
-        );
-
-        /*
-         * --------------------------------------------------------------
-         * Step 2: Select provider
-         * --------------------------------------------------------------
+        /**
+         * Step 2:
+         * Select the best shipping provider.
          */
-
-        try {
-
-            $provider = $this->router->route(
-                $shipment
-            );
-
-        } catch (Throwable $e) {
-
-            update_option(
-                'processor_step_3',
-                'Router Failed: ' . $e->getMessage()
-            );
-
-            return [
-
-                'success' => false,
-
-                'message' => 'Unable to select shipping provider.',
-
-                'error' => $e->getMessage()
-
-            ];
-        }
-
-        update_option(
-            'processor_step_3',
-            'Router Finished'
-        );
+        $provider = $this->router->route($shipment);
 
         if (!$provider) {
-
-            update_option(
-                'processor_step_4',
-                'No Provider'
-            );
-
             return [
-
                 'success' => false,
-
                 'message' => 'No shipping provider available.'
-
             ];
         }
 
-        update_option(
-            'processor_step_4',
-            'Provider Selected: ' . $provider->getName()
-        );
-
-        /*
-         * --------------------------------------------------------------
-         * Step 3: Verify provider capability
-         * --------------------------------------------------------------
+        /**
+         * Step 3:
+         * Make sure the provider can create orders.
          */
-
         if (!method_exists($provider, 'createOrder')) {
+            return [
+                'success' => false,
+                'message' => 'Selected shipping provider cannot create orders.'
+            ];
+        }
 
-            update_option(
-                'processor_step_5',
-                'Provider cannot create orders'
+        /**
+         * Step 4:
+         * Prevent duplicate Speedaf shipments.
+         */
+        if (!empty($shipment['order_id'])) {
+
+            $existingBillCode = get_post_meta(
+                $shipment['order_id'],
+                '_speedaf_bill_code',
+                true
             );
 
-            return [
-
-                'success' => false,
-
-                'message' =>
-                    'Selected shipping provider cannot create orders.'
-
-            ];
-        }
-
-        /*
-         * --------------------------------------------------------------
-         * Step 4: Prevent duplicate shipment creation
-         * --------------------------------------------------------------
-         */
-
-        $orderId = isset($shipment['order_id'])
-            ? (int) $shipment['order_id']
-            : 0;
-
-        if ($orderId > 0) {
-
-            $existingShipment =
-                get_post_meta(
-                    $orderId,
-                    '_sefrelshop_speedaf_response',
-                    true
-                );
-
-            if (!empty($existingShipment)) {
-
-                update_option(
-                    'processor_step_5',
-                    'Existing Speedaf response found. API call skipped.'
-                );
-
+            if (!empty($existingBillCode)) {
                 return [
-
-                    'success' => false,
-
-                    'message' =>
-                        'Speedaf shipment may already exist. API call skipped.',
-
-                    'existing_response' =>
-                        $existingShipment
-
+                    'success' => true,
+                    'duplicate' => true,
+                    'provider' => $provider->getName(),
+                    'message' => 'Speedaf shipment already exists.',
+                    'billCode' => $existingBillCode,
+                    'shipment' => $shipment
                 ];
             }
         }
 
-        /*
-         * --------------------------------------------------------------
-         * Step 5: Call Speedaf
-         * --------------------------------------------------------------
+        /**
+         * Step 5:
+         * Create the shipment with Speedaf.
          */
+        $result = $provider->createOrder($shipment);
 
-        update_option(
-            'processor_step_5',
-            'Calling Speedaf API'
-        );
-
-        try {
-
-            $result = $provider->createOrder(
-                $shipment
-            );
-
-        } catch (Throwable $e) {
-
-            update_option(
-                'processor_step_6',
-                'Provider Exception: ' . $e->getMessage()
-            );
-
+        /**
+         * Step 6:
+         * Check whether Speedaf accepted the request.
+         */
+        if (
+            !is_array($result) ||
+            empty($result['success'])
+        ) {
             return [
-
                 'success' => false,
-
-                'message' =>
-                    'Shipping provider request failed.',
-
-                'error' =>
-                    $e->getMessage()
-
+                'provider' => $provider->getName(),
+                'message' => 'Speedaf rejected the shipment request.',
+                'result' => $result
             ];
         }
 
-        /*
-         * --------------------------------------------------------------
-         * Step 6: Store response
-         * --------------------------------------------------------------
+        /**
+         * Step 7:
+         * Extract Speedaf response.
          */
+        $billCode = null;
+        $customerOrderNo = null;
 
-        if ($orderId > 0) {
+        if (!empty($result['decrypted'])) {
 
-            update_post_meta(
-                $orderId,
-                '_sefrelshop_speedaf_response',
-                $result
+            $decrypted = json_decode(
+                $result['decrypted'],
+                true
             );
+
+            if (is_array($decrypted)) {
+
+                $billCode = $decrypted['billCode'] ?? null;
+
+                $customerOrderNo =
+                    $decrypted['customerOrderNo'] ?? null;
+            }
         }
 
-        update_option(
-            'processor_step_6',
-            wp_json_encode($result)
-        );
-
-        /*
-         * --------------------------------------------------------------
-         * Step 7: Determine final status
-         * --------------------------------------------------------------
+        /**
+         * Step 8:
+         * Save Speedaf information
+         * against the WooCommerce order.
          */
-
         if (
-            isset($result['success']) &&
-            $result['success'] === true
+            !empty($shipment['order_id']) &&
+            !empty($billCode)
         ) {
 
-            return [
+            update_post_meta(
+                $shipment['order_id'],
+                '_speedaf_bill_code',
+                sanitize_text_field($billCode)
+            );
 
-                'success' => true,
+            if (!empty($customerOrderNo)) {
 
-                'provider' =>
-                    $provider->getName(),
+                update_post_meta(
+                    $shipment['order_id'],
+                    '_speedaf_customer_order_no',
+                    sanitize_text_field($customerOrderNo)
+                );
+            }
 
-                'shipment' =>
-                    $shipment,
+            update_post_meta(
+                $shipment['order_id'],
+                '_speedaf_status',
+                'created'
+            );
 
-                'result' =>
-                    $result
-
-            ];
+            update_post_meta(
+                $shipment['order_id'],
+                '_speedaf_created_at',
+                current_time('mysql')
+            );
         }
 
+        /**
+         * Step 9:
+         * Return complete result.
+         */
         return [
-
-            'success' => false,
-
-            'provider' =>
-                $provider->getName(),
-
-            'shipment' =>
-                $shipment,
-
-            'result' =>
-                $result
-
+            'success' => true,
+            'duplicate' => false,
+            'provider' => $provider->getName(),
+            'billCode' => $billCode,
+            'customerOrderNo' => $customerOrderNo,
+            'shipment' => $shipment,
+            'result' => $result
         ];
     }
 }
