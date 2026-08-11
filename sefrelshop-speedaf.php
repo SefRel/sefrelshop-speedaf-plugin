@@ -86,3 +86,25 @@ if (!function_exists('sefrelshop_process_order')) {
         );
     }
 }
+
+/**
+ * Make customer phone number required at checkout.
+ */
+add_filter(
+    'woocommerce_billing_fields',
+    'sefrelshop_make_billing_phone_required',
+    20
+);
+
+function sefrelshop_make_billing_phone_required(
+    array $fields
+): array {
+
+    if (isset($fields['billing_phone'])) {
+
+        $fields['billing_phone']['required'] = true;
+
+    }
+
+    return $fields;
+}
