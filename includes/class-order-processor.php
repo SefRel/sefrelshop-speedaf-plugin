@@ -29,15 +29,15 @@ class OrderProcessor
 
         } catch (Throwable $e) {
 
-            return [
-                'success' => false,
-                'message' => 'Unable to build shipment.',
-                'error'   => $e->getMessage()
-            ];
+            return $this->handleFailure(
+                $data,
+                'shipment_build_failed',
+                $e->getMessage()
+            );
         }
 
         /**
-         * Make sure we have a WooCommerce order ID.
+         * Get WooCommerce order.
          */
         $orderId = !empty($shipment['order_id'])
             ? absint($shipment['order_id'])
@@ -51,9 +51,6 @@ class OrderProcessor
             ];
         }
 
-        /**
-         * Load WooCommerce order.
-         */
         $order = wc_get_order($orderId);
 
         if (!$order) {
@@ -66,12 +63,7 @@ class OrderProcessor
 
         /**
          * Step 2:
-         * Check whether this order has already
-         * been submitted to Speedaf.
-         *
-         * This prevents duplicate shipments
-         * when WooCommerce fires the processing
-         * hook more than once.
+         * Check for an existing Speedaf shipment.
          */
         $existingBillCode = $order->get_meta(
             '_speedaf_bill_code',
@@ -92,7 +84,7 @@ class OrderProcessor
 
         /**
          * Step 3:
-         * Select the best shipping provider.
+         * Select shipping provider.
          */
         try {
 
@@ -100,44 +92,59 @@ class OrderProcessor
 
         } catch (Throwable $e) {
 
-            return [
-                'success' => false,
-                'message' => 'Unable to select shipping provider.',
-                'error'   => $e->getMessage()
-            ];
+            return $this->handleFailure(
+                $data,
+                'provider_routing_failed',
+                $e->getMessage(),
+                $order
+            );
         }
 
         if (!$provider) {
 
-            $order->add_order_note(
-                'Speedaf shipment was not created: no supported shipping provider was available.'
+            return $this->handleFailure(
+                $data,
+                'no_shipping_provider',
+                'No shipping provider is available for this shipment.',
+                $order
             );
-
-            return [
-                'success' => false,
-                'message' => 'No shipping provider available.'
-            ];
         }
 
         /**
          * Step 4:
-         * Make sure the provider can create orders.
+         * Verify provider capability.
          */
         if (!method_exists($provider, 'createOrder')) {
 
-            $order->add_order_note(
-                'Speedaf shipment was not created: selected provider cannot create orders.'
+            return $this->handleFailure(
+                $data,
+                'provider_cannot_create_order',
+                'Selected shipping provider cannot create orders.',
+                $order
             );
-
-            return [
-                'success' => false,
-                'provider' => $provider->getName(),
-                'message' => 'Selected shipping provider cannot create orders.'
-            ];
         }
 
         /**
          * Step 5:
+         * Mark logistics as processing.
+         */
+        $order->update_meta_data(
+            '_speedaf_status',
+            'processing'
+        );
+
+        $order->delete_meta_data(
+            '_speedaf_error_code'
+        );
+
+        $order->delete_meta_data(
+            '_speedaf_error_message'
+        );
+
+        $order->save();
+
+        /**
+         * Step 6:
          * Create shipment with Speedaf.
          */
         try {
@@ -146,52 +153,45 @@ class OrderProcessor
 
         } catch (Throwable $e) {
 
-            /**
-             * Important:
-             * Never allow a Speedaf API exception
-             * to crash WooCommerce.
-             */
-            $order->add_order_note(
-                'Speedaf shipment creation failed: ' . $e->getMessage()
+            return $this->handleFailure(
+                $data,
+                'speedaf_api_exception',
+                $e->getMessage(),
+                $order
             );
-
-            return [
-                'success'  => false,
-                'provider' => $provider->getName(),
-                'message'  => 'Speedaf shipment creation failed.',
-                'error'    => $e->getMessage()
-            ];
         }
 
         /**
-         * Step 6:
-         * Validate API result.
+         * Step 7:
+         * Validate Speedaf API response.
          */
         if (
             !is_array($result) ||
             empty($result['success'])
         ) {
 
-            $order->add_order_note(
-                'Speedaf shipment creation failed. The API did not accept the request.'
-            );
+            $message = 'Speedaf rejected the shipment request.';
 
-            return [
-                'success'  => false,
-                'provider' => $provider->getName(),
-                'message'  => 'Speedaf rejected the shipment request.',
-                'result'   => $result
-            ];
+            if (
+                is_array($result) &&
+                !empty($result['error'])
+            ) {
+                $message .= ' ' . $result['error'];
+            }
+
+            return $this->handleFailure(
+                $data,
+                'speedaf_api_rejected',
+                $message,
+                $order,
+                $result
+            );
         }
 
         /**
-         * Step 7:
-         * Extract Speedaf response.
+         * Step 8:
+         * Decode Speedaf response.
          */
-        $billCode = null;
-
-        $customerOrderNo = null;
-
         $decrypted = null;
 
         if (!empty($result['decrypted'])) {
@@ -206,51 +206,53 @@ class OrderProcessor
             } elseif (is_array($result['decrypted'])) {
 
                 $decrypted = $result['decrypted'];
-
             }
-        }
-
-        if (is_array($decrypted)) {
-
-            $billCode = !empty($decrypted['billCode'])
-                ? sanitize_text_field(
-                    $decrypted['billCode']
-                )
-                : null;
-
-            $customerOrderNo = !empty(
-                $decrypted['customerOrderNo']
-            )
-                ? sanitize_text_field(
-                    $decrypted['customerOrderNo']
-                )
-                : null;
-        }
-
-        /**
-         * Step 8:
-         * A successful HTTP response without
-         * a Speedaf bill code is not considered
-         * a completed shipment.
-         */
-        if (empty($billCode)) {
-
-            $order->add_order_note(
-                'Speedaf returned a successful API response, but no bill code was received.'
-            );
-
-            return [
-                'success'  => false,
-                'provider' => $provider->getName(),
-                'message'  => 'Speedaf did not return a shipment bill code.',
-                'result'   => $result
-            ];
         }
 
         /**
          * Step 9:
-         * Save Speedaf shipment information
-         * to WooCommerce order metadata.
+         * Extract Speedaf identifiers.
+         */
+        $billCode = null;
+
+        $customerOrderNo = null;
+
+        if (is_array($decrypted)) {
+
+            if (!empty($decrypted['billCode'])) {
+
+                $billCode = sanitize_text_field(
+                    $decrypted['billCode']
+                );
+            }
+
+            if (!empty($decrypted['customerOrderNo'])) {
+
+                $customerOrderNo = sanitize_text_field(
+                    $decrypted['customerOrderNo']
+                );
+            }
+        }
+
+        /**
+         * Step 10:
+         * Successful HTTP response without
+         * bill code is treated as failure.
+         */
+        if (empty($billCode)) {
+
+            return $this->handleFailure(
+                $data,
+                'missing_bill_code',
+                'Speedaf returned a successful response but no bill code was received.',
+                $order,
+                $result
+            );
+        }
+
+        /**
+         * Step 11:
+         * Save Speedaf shipment information.
          */
         $order->update_meta_data(
             '_speedaf_bill_code',
@@ -275,13 +277,18 @@ class OrderProcessor
             current_time('mysql')
         );
 
-        /**
-         * Save all metadata.
-         */
+        $order->delete_meta_data(
+            '_speedaf_error_code'
+        );
+
+        $order->delete_meta_data(
+            '_speedaf_error_message'
+        );
+
         $order->save();
 
         /**
-         * Step 10:
+         * Step 12:
          * Add WooCommerce order note.
          */
         $order->add_order_note(
@@ -292,16 +299,148 @@ class OrderProcessor
         );
 
         /**
-         * Step 11:
-         * Return final result.
+         * Step 13:
+         * Return successful result.
          */
         return [
-            'success'          => true,
-            'duplicate'        => false,
-            'provider'         => $provider->getName(),
-            'billCode'         => $billCode,
-            'customerOrderNo'  => $customerOrderNo,
-            'shipment'         => $shipment
+            'success'         => true,
+            'duplicate'       => false,
+            'provider'        => $provider->getName(),
+            'billCode'        => $billCode,
+            'customerOrderNo' => $customerOrderNo,
+            'shipment'        => $shipment
         ];
+    }
+
+
+    /**
+     * Handle logistics failure safely.
+     */
+    private function handleFailure(
+        array $data,
+        string $errorCode,
+        string $errorMessage,
+        ?WC_Order $order = null,
+        $result = null
+    ): array {
+
+        /**
+         * If the order wasn't passed in,
+         * try to recover it from the input.
+         */
+        if (!$order && !empty($data['wc_order'])) {
+
+            if ($data['wc_order'] instanceof WC_Order) {
+
+                $order = $data['wc_order'];
+            }
+        }
+
+        /**
+         * Save failure information.
+         */
+        if ($order) {
+
+            $order->update_meta_data(
+                '_speedaf_status',
+                'action_required'
+            );
+
+            $order->update_meta_data(
+                '_speedaf_error_code',
+                sanitize_text_field($errorCode)
+            );
+
+            $order->update_meta_data(
+                '_speedaf_error_message',
+                sanitize_textarea_field($errorMessage)
+            );
+
+            $order->update_meta_data(
+                '_speedaf_last_attempt',
+                current_time('mysql')
+            );
+
+            $order->save();
+
+            /**
+             * Add order note.
+             */
+            $order->add_order_note(
+                sprintf(
+                    'Speedaf shipment requires attention. [%s] %s',
+                    $errorCode,
+                    $errorMessage
+                )
+            );
+
+            /**
+             * Notify store administrator.
+             */
+            $this->sendFailureNotification(
+                $order,
+                $errorCode,
+                $errorMessage
+            );
+        }
+
+        /**
+         * Return controlled failure response.
+         */
+        return [
+            'success'    => false,
+            'status'     => 'action_required',
+            'error_code' => $errorCode,
+            'message'    => $errorMessage,
+            'result'     => $result
+        ];
+    }
+
+
+    /**
+     * Notify store administrator about
+     * a logistics failure.
+     */
+    private function sendFailureNotification(
+        WC_Order $order,
+        string $errorCode,
+        string $errorMessage
+    ): void {
+
+        $adminEmail = get_option(
+            'admin_email'
+        );
+
+        if (empty($adminEmail)) {
+            return;
+        }
+
+        $orderId = $order->get_id();
+
+        $customerName = $order->get_formatted_billing_full_name();
+
+        $subject = sprintf(
+            '[SefrelShop] Shipping Action Required — Order #%s',
+            $orderId
+        );
+
+        $message = sprintf(
+            "A SefrelShop order requires logistics attention.\n\n" .
+            "Order: #%s\n" .
+            "Customer: %s\n" .
+            "Error Code: %s\n" .
+            "Reason: %s\n\n" .
+            "Please review the order and resolve the issue before shipment creation.",
+            $orderId,
+            $customerName ?: 'N/A',
+            $errorCode,
+            $errorMessage
+        );
+
+        wp_mail(
+            $adminEmail,
+            $subject,
+            $message
+        );
     }
 }
