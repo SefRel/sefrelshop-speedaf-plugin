@@ -29,6 +29,8 @@ require_once __DIR__ . '/includes/logistics/class-speedaf-provider.php';
 require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
 
+require_once __DIR__ . '/includes/class-speedaf-tracking-sync.php';
+
 /*
 |--------------------------------------------------------------------------
 | WooCommerce Order Hook
@@ -107,4 +109,71 @@ function sefrelshop_make_billing_phone_required(
     }
 
     return $fields;
+}
+
+
+
+
+/**
+ * TEMPORARY SPEEDAF TRACKING TEST
+ *
+ * Usage:
+ * /wp-admin/?sefrelshop_test_tracking=27533
+ */
+
+add_action(
+    'admin_init',
+    'sefrelshop_test_tracking'
+);
+
+function sefrelshop_test_tracking()
+{
+    if (
+        !current_user_can('manage_woocommerce')
+    ) {
+        return;
+    }
+
+    if (
+        empty($_GET['sefrelshop_test_tracking'])
+    ) {
+        return;
+    }
+
+    $order_id = absint(
+        $_GET['sefrelshop_test_tracking']
+    );
+
+    if (!$order_id) {
+        wp_die(
+            'Invalid WooCommerce order ID.'
+        );
+    }
+
+    $order = wc_get_order(
+        $order_id
+    );
+
+    if (!$order) {
+        wp_die(
+            'WooCommerce order not found.'
+        );
+    }
+
+    $plugin = new SefrelShopPlugin();
+
+    $result = $plugin->syncTracking(
+        $order
+    );
+
+    echo '<pre>';
+    echo esc_html(
+        wp_json_encode(
+            $result,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
+        )
+    );
+    echo '</pre>';
+
+    exit;
 }

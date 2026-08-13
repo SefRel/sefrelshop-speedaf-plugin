@@ -8,6 +8,11 @@ class SefrelShopPlugin
     private OrderProcessor $processor;
 
     /**
+     * Speedaf Tracking Synchroniser
+     */
+    private SpeedafTrackingSync $trackingSync;
+
+    /**
      * Build the entire application.
      */
     public function __construct()
@@ -17,6 +22,7 @@ class SefrelShopPlugin
         | Core Services
         |--------------------------------------------------------------------------
         */
+
 
         $config = new SpeedafConfig();
 
@@ -76,13 +82,26 @@ class SefrelShopPlugin
             $builder,
             $router
         );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Speedaf Tracking Synchronisation
+        |--------------------------------------------------------------------------
+        */
+
+        $this->trackingSync = new SpeedafTrackingSync(
+            $speedaf,
+            $config
+        );
     }
 
     /**
      * Process WooCommerce Order.
+     *
+     * @param mixed $order
      */
     public function processOrder(
-        WC_Order $order
+        $order
     ): array {
 
         return $this->processor->process([
@@ -90,6 +109,22 @@ class SefrelShopPlugin
             'wc_order' => $order
 
         ]);
+
+    }
+
+    /**
+     * Synchronise tracking information.
+     *
+     * @param mixed $order
+     */
+    public function syncTracking(
+        $order
+    ): array {
+
+        return $this->trackingSync->syncOrder(
+
+             $order
+    );
 
     }
 }
