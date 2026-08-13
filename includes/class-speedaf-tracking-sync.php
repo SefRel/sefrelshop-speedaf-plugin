@@ -123,36 +123,84 @@ class SpeedafTrackingSync
         |--------------------------------------------------------------------------
         */
 
-        $trackingResponse = null;
+       $trackingResponse = null;
 
-        if (!empty($result['decrypted'])) {
+$decryptedResponse = $result['decrypted'] ?? null;
 
-            $trackingResponse = json_decode(
-                $result['decrypted'],
-                true
-            );
-        }
 
-        if (!is_array($trackingResponse)) {
+/*
+|--------------------------------------------------------------------------
+| Step 4: Handle empty/null tracking response
+|--------------------------------------------------------------------------
+*/
 
-            $this->log(
-                'error',
-                'Unable to decode Speedaf tracking response for order #'
-                . $orderId
-            );
+if (
+    $decryptedResponse === null ||
+    $decryptedResponse === '' ||
+    $decryptedResponse === 'null'
+) {
 
-            return [
+    $this->log(
+        'info',
+        'Speedaf returned no tracking events for order #'
+        . $orderId
+        . '. Customer order number: '
+        . $customerOrderNo
+    );
 
-                'success' => false,
+    return [
 
-                'status' => 'invalid_response',
+        'success' => true,
 
-                'message' => 'Unable to decode Speedaf tracking response.',
+        'status' => 'no_tracking_events',
 
-                'result' => $result
+        'message' => 'Speedaf accepted the tracking request, but no tracking events are available yet.',
 
-            ];
-        }
+        'customer_order_no' => $customerOrderNo,
+
+        'tracking' => [],
+
+        'raw_decrypted' => $decryptedResponse
+
+    ];
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Step 5: Decode tracking response
+|--------------------------------------------------------------------------
+*/
+
+$trackingResponse = json_decode(
+    $decryptedResponse,
+    true
+);
+
+if (!is_array($trackingResponse)) {
+
+    $this->log(
+        'error',
+        'Invalid Speedaf tracking response for order #'
+        . $orderId
+        . '. Decrypted response: '
+        . $decryptedResponse
+    );
+
+    return [
+
+        'success' => false,
+
+        'status' => 'invalid_response',
+
+        'message' => 'Speedaf returned an invalid tracking response.',
+
+        'raw_decrypted' => $decryptedResponse,
+
+        'result' => $result
+
+    ];
+}
 
         /*
         |--------------------------------------------------------------------------
