@@ -91,6 +91,42 @@ public function supports(array $shipment): bool
     }
 
     /**
+
+* Subscribe a Speedaf shipment to tracking updates.
+*
+* Speedaf will send future tracking events
+* to our callback URL.
+  */
+  public function subscribeTracking(string $mailNo): array
+  {
+  if (empty($mailNo)) {
+  return [
+  'success' => false,
+  'status' => 'missing_mail_no',
+  'error' => 'Speedaf mail number is required for tracking subscription.'
+  ];
+  }
+
+  $mailNo = function_exists('sanitize_text_field')
+      ? sanitize_text_field($mailNo)
+      : trim(preg_replace('/[\r\n\t]+/', ' ', strip_tags($mailNo)));
+
+  $notifyUrl = function_exists('rest_url')
+      ? rest_url('sefrelshop/v1/speedaf/tracking')
+      : '';
+
+  return $this->api->post(
+  '/open-api/express/track/subscribe',
+  [
+  'mailNo' => $mailNo,
+  'customerCode' => $this->config->get('customerCode'),
+  'notifyUrl' => filter_var($notifyUrl, FILTER_VALIDATE_URL) ? $notifyUrl : ''
+  ]
+  );
+  }
+
+
+    /**
      * Track shipment.
      */
     public function track(array $trackingData): array
