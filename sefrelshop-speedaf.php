@@ -21,6 +21,7 @@ require_once __DIR__ . '/includes/class-speedaf-encryption.php';
 require_once __DIR__ . '/includes/class-speedaf-api.php';
 require_once __DIR__ . '/includes/class-order-processor.php';
 require_once __DIR__ . '/includes/class-plugin.php';
+require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
 
 require_once __DIR__ . '/includes/helpers/class-order-builder.php';
 
@@ -30,6 +31,25 @@ require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
 
 require_once __DIR__ . '/includes/class-speedaf-tracking-sync.php';
+require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
+
+/*
+|--------------------------------------------------------------------------
+| Speedaf Tracking Callback
+|--------------------------------------------------------------------------
+*/
+
+if (function_exists('add_action')) {
+    add_action(
+        'rest_api_init',
+        function () {
+
+            $callback = new SpeedafTrackingCallback();
+
+            $callback->registerRoutes();
+        }
+    );
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -92,11 +112,13 @@ if (!function_exists('sefrelshop_process_order')) {
 /**
  * Make customer phone number required at checkout.
  */
-add_filter(
-    'woocommerce_billing_fields',
-    'sefrelshop_make_billing_phone_required',
-    20
-);
+if (function_exists('add_filter')) {
+    add_filter(
+        'woocommerce_billing_fields',
+        'sefrelshop_make_billing_phone_required',
+        20
+    );
+}
 
 function sefrelshop_make_billing_phone_required(
     array $fields
@@ -121,10 +143,12 @@ function sefrelshop_make_billing_phone_required(
  * /wp-admin/?sefrelshop_test_tracking=27533
  */
 
-add_action(
-    'admin_init',
-    'sefrelshop_test_tracking'
-);
+if (function_exists('add_action')) {
+    add_action(
+        'admin_init',
+        'sefrelshop_test_tracking'
+    );
+}
 
 function sefrelshop_test_tracking()
 {
