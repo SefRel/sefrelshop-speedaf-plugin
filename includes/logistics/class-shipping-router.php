@@ -3,12 +3,12 @@
 class ShippingRouter
 {
     /**
-     * Logistics Manager
+     * Logistics manager.
      */
     private LogisticsManager $manager;
 
     /**
-     * Constructor
+     * Constructor.
      */
     public function __construct(
         LogisticsManager $manager
@@ -17,18 +17,15 @@ class ShippingRouter
     }
 
     /**
-     * Select the best provider
-     * for a WooCommerce order.
-     *
-     * For now, simply return the
-     * first eligible provider.
+     * Determine the best provider
+     * for this shipment.
      */
     public function route(
-        array $order
+        array $shipment
     ): ?ShippingProvider {
 
         $providers = $this->manager
-            ->getSupportedProviders($order);
+            ->getSupportedProviders($shipment);
 
         if (empty($providers)) {
             return null;
@@ -36,15 +33,17 @@ class ShippingRouter
 
         /**
          * Temporary strategy:
-         * return the first provider.
+         * use the first supported provider.
          *
-         * Later this will become:
-         * - Category rules
-         * - Coverage rules
-         * - Cheapest rate
-         * - Fastest delivery
+         * Future versions will rank providers
+         * based on:
+         *
+         * - Supported categories
+         * - Shipping price
+         * - Delivery speed
          * - Vendor preference
          * - Customer preference
+         * - Geographic coverage
          */
         return $providers[0];
     }
