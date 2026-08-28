@@ -19,6 +19,7 @@ if (!defined('ABSPATH')) {
 require_once __DIR__ . '/includes/class-speedaf-config.php';
 require_once __DIR__ . '/includes/class-speedaf-encryption.php';
 require_once __DIR__ . '/includes/class-speedaf-api.php';
+require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-order-processor.php';
 require_once __DIR__ . '/includes/class-plugin.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
@@ -131,6 +132,21 @@ function sefrelshop_make_billing_phone_required(
     }
 
     return $fields;
+}
+
+/**
+ * Register customer-facing Speedaf tracking.
+ */
+add_action(
+    'init',
+    'sefrelshop_register_customer_tracking'
+);
+
+function sefrelshop_register_customer_tracking(): void
+{
+    $tracking = new SpeedafCustomerTracking();
+
+    $tracking->registerHooks();
 }
 
 
