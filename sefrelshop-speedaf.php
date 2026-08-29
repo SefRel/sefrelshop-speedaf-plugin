@@ -52,6 +52,11 @@ if (function_exists('add_action')) {
     );
 }
 
+/**
+ * Main plugin instance.
+ */
+$sefrelshop_plugin = new SefrelShopPlugin();
+
 /*
 |--------------------------------------------------------------------------
 | WooCommerce Order Hook
