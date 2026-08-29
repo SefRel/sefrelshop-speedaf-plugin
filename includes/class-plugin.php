@@ -113,6 +113,11 @@ class SefrelShopPlugin
         $this->customerTracking = new SpeedafCustomerTracking();
 
         $this->customerTracking->registerHooks();
+
+        update_option(
+            'sefrelshop_customer_tracking_registered',
+            current_time('mysql')
+        );
     }
 
     /**
