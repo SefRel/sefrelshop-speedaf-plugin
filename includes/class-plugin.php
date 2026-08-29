@@ -1,5 +1,9 @@
 <?php
 
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 class SefrelShopPlugin
 {
     /**
@@ -13,6 +17,11 @@ class SefrelShopPlugin
     private SpeedafTrackingSync $trackingSync;
 
     /**
+     * Customer-facing Speedaf Tracking
+     */
+    private SpeedafCustomerTracking $customerTracking;
+
+    /**
      * Build the entire application.
      */
     public function __construct()
@@ -22,7 +31,6 @@ class SefrelShopPlugin
         | Core Services
         |--------------------------------------------------------------------------
         */
-
 
         $config = new SpeedafConfig();
 
@@ -62,7 +70,9 @@ class SefrelShopPlugin
         |--------------------------------------------------------------------------
         */
 
-        $router = new ShippingRouter($manager);
+        $router = new ShippingRouter(
+            $manager
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -74,7 +84,7 @@ class SefrelShopPlugin
 
         /*
         |--------------------------------------------------------------------------
-        | Processor
+        | Order Processor
         |--------------------------------------------------------------------------
         */
 
@@ -93,6 +103,16 @@ class SefrelShopPlugin
             $speedaf,
             $config
         );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer-Facing Tracking
+        |--------------------------------------------------------------------------
+        */
+
+        $this->customerTracking = new SpeedafCustomerTracking();
+
+        $this->customerTracking->registerHooks();
     }
 
     /**
@@ -104,12 +124,11 @@ class SefrelShopPlugin
         $order
     ): array {
 
-        return $this->processor->process([
-
-            'wc_order' => $order
-
-        ]);
-
+        return $this->processor->process(
+            [
+                'wc_order' => $order
+            ]
+        );
     }
 
     /**
@@ -122,9 +141,7 @@ class SefrelShopPlugin
     ): array {
 
         return $this->trackingSync->syncOrder(
-
-             $order
-    );
-
+            $order
+        );
     }
 }

@@ -19,8 +19,8 @@ if (!defined('ABSPATH')) {
 require_once __DIR__ . '/includes/class-speedaf-config.php';
 require_once __DIR__ . '/includes/class-speedaf-encryption.php';
 require_once __DIR__ . '/includes/class-speedaf-api.php';
-require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-order-processor.php';
+require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-plugin.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
 
