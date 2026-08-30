@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: SefrelShop Speedaf Shipping
  * Description: Speedaf Shipping Integration for WooCommerce & Dokan
@@ -19,10 +20,6 @@ if (!defined('ABSPATH')) {
 require_once __DIR__ . '/includes/class-speedaf-config.php';
 require_once __DIR__ . '/includes/class-speedaf-encryption.php';
 require_once __DIR__ . '/includes/class-speedaf-api.php';
-require_once __DIR__ . '/includes/class-order-processor.php';
-require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
-require_once __DIR__ . '/includes/class-plugin.php';
-require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
 
 require_once __DIR__ . '/includes/helpers/class-order-builder.php';
 
@@ -31,8 +28,11 @@ require_once __DIR__ . '/includes/logistics/class-speedaf-provider.php';
 require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
 
+require_once __DIR__ . '/includes/class-order-processor.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-sync.php';
+require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
+require_once __DIR__ . '/includes/class-plugin.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -40,21 +40,22 @@ require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
 |--------------------------------------------------------------------------
 */
 
-if (function_exists('add_action')) {
-    add_action(
-        'rest_api_init',
-        function () {
+add_action(
+    'rest_api_init',
+    function () {
 
-            $callback = new SpeedafTrackingCallback();
+        $callback = new SpeedafTrackingCallback();
 
-            $callback->registerRoutes();
-        }
-    );
-}
+        $callback->registerRoutes();
+    }
+);
 
-/**
- * Main plugin instance.
- */
+/*
+|--------------------------------------------------------------------------
+| Main Plugin Instance
+|--------------------------------------------------------------------------
+*/
+
 $sefrelshop_plugin = new SefrelShopPlugin();
 
 /*
@@ -67,22 +68,25 @@ $sefrelshop_plugin = new SefrelShopPlugin();
  * Runs whenever an order
  * changes to Processing.
  */
-if (defined('ABSPATH') && function_exists('add_action')) {
-    add_action(
-        'woocommerce_order_status_processing',
-        'sefrelshop_process_order',
-        10,
-        1
-    );
-}
+add_action(
+    'woocommerce_order_status_processing',
+    'sefrelshop_process_order',
+    10,
+    1
+);
 
 if (!function_exists('sefrelshop_process_order')) {
 
     function sefrelshop_process_order($order_id)
     {
-        update_option('step_1', 'Hook Fired');
+        update_option(
+            'step_1',
+            'Hook Fired'
+        );
 
-        $order = wc_get_order($order_id);
+        $order = wc_get_order(
+            $order_id
+        );
 
         if (!$order) {
 
@@ -106,7 +110,9 @@ if (!function_exists('sefrelshop_process_order')) {
             'Plugin Created'
         );
 
-        $result = $plugin->processOrder($order);
+        $result = $plugin->processOrder(
+            $order
+        );
 
         update_option(
             'step_4',
@@ -115,16 +121,17 @@ if (!function_exists('sefrelshop_process_order')) {
     }
 }
 
-/**
- * Make customer phone number required at checkout.
- */
-if (function_exists('add_filter')) {
-    add_filter(
-        'woocommerce_billing_fields',
-        'sefrelshop_make_billing_phone_required',
-        20
-    );
-}
+/*
+|--------------------------------------------------------------------------
+| WooCommerce Billing Phone
+|--------------------------------------------------------------------------
+*/
+
+add_filter(
+    'woocommerce_billing_fields',
+    'sefrelshop_make_billing_phone_required',
+    20
+);
 
 function sefrelshop_make_billing_phone_required(
     array $fields
@@ -133,15 +140,17 @@ function sefrelshop_make_billing_phone_required(
     if (isset($fields['billing_phone'])) {
 
         $fields['billing_phone']['required'] = true;
-
     }
 
     return $fields;
 }
 
-/**
- * Register customer-facing Speedaf tracking.
- */
+/*
+|--------------------------------------------------------------------------
+| Customer-Facing Speedaf Tracking
+|--------------------------------------------------------------------------
+*/
+
 add_action(
     'init',
     'sefrelshop_register_customer_tracking'
@@ -154,34 +163,29 @@ function sefrelshop_register_customer_tracking(): void
     $tracking->registerHooks();
 }
 
+/*
+|--------------------------------------------------------------------------
+| Temporary Speedaf Tracking Test
+|--------------------------------------------------------------------------
+|
+| Usage:
+|
+| /wp-admin/?sefrelshop_test_tracking=27538
+|
+*/
 
+add_action(
+    'admin_init',
+    'sefrelshop_test_tracking'
+);
 
-
-/**
- * TEMPORARY SPEEDAF TRACKING TEST
- *
- * Usage:
- * /wp-admin/?sefrelshop_test_tracking=27533
- */
-
-if (function_exists('add_action')) {
-    add_action(
-        'admin_init',
-        'sefrelshop_test_tracking'
-    );
-}
-
-function sefrelshop_test_tracking()
+function sefrelshop_test_tracking(): void
 {
-    if (
-        !current_user_can('manage_woocommerce')
-    ) {
+    if (!current_user_can('manage_woocommerce')) {
         return;
     }
 
-    if (
-        empty($_GET['sefrelshop_test_tracking'])
-    ) {
+    if (empty($_GET['sefrelshop_test_tracking'])) {
         return;
     }
 
@@ -190,6 +194,7 @@ function sefrelshop_test_tracking()
     );
 
     if (!$order_id) {
+
         wp_die(
             'Invalid WooCommerce order ID.'
         );
@@ -200,6 +205,7 @@ function sefrelshop_test_tracking()
     );
 
     if (!$order) {
+
         wp_die(
             'WooCommerce order not found.'
         );
@@ -212,12 +218,14 @@ function sefrelshop_test_tracking()
     );
 
     echo '<pre>';
+
     echo esc_html(
         wp_json_encode(
             $result,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
         )
     );
+
     echo '</pre>';
 
     exit;

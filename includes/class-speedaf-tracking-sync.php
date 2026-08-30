@@ -41,11 +41,19 @@ class SpeedafTrackingSync
         |--------------------------------------------------------------------------
         */
 
-        $customerOrderNo = get_post_meta(
-            $orderId,
+        $customerOrderNo = $order->get_meta(
             '_speedaf_customer_order_no',
             true
         );
+
+        /**
+        * Fallback:
+        * Speedaf customerOrderNo is currently
+        * the WooCommerce order number.
+        */
+        if (empty($customerOrderNo)) {
+         $customerOrderNo = (string) $order->get_order_number();
+        }
 
         if (empty($customerOrderNo)) {
 
@@ -351,7 +359,7 @@ if (!is_array($trackingResponse)) {
         update_post_meta(
             $orderId,
             '_speedaf_tracking_history',
-            wp_json_encode($records)
+            $records
         );
 
         update_post_meta(
