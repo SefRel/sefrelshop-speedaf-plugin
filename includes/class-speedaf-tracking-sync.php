@@ -271,6 +271,31 @@ if (!is_array($trackingResponse)) {
 
             ];
         }
+            
+        if (empty($records)) {
+
+    return [
+
+        'success' => true,
+
+        'status' => 'no_tracking_events',
+
+        'message' => 'Speedaf returned no tracking records.',
+
+        'customer_order_no' => $customerOrderNo,
+
+        'tracking_response' => $trackingResponse,
+
+        'raw_decrypted' => $decryptedResponse,
+
+        'api_result' => $result,
+
+        'tracking_request' => $trackingData,
+
+        'tracking' => []
+
+    ];
+}
 
         /*
         |--------------------------------------------------------------------------
