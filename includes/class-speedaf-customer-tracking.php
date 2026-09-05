@@ -7,13 +7,14 @@ if (!defined('ABSPATH')) {
 class SpeedafCustomerTracking
 {
     /**
-     * Register WooCommerce customer-facing hooks.
+     * Prevent duplicate rendering when multiple hooks fire.
      */
+    private static bool $rendered = false;
+
     public function registerHooks(): void
     {
-        /**
-         * Display tracking information
-         * on the WooCommerce View Order page.
+        /*
+         * Standard WooCommerce View Order page.
          */
         add_action(
             'woocommerce_order_details_after_order_table',
@@ -21,10 +22,21 @@ class SpeedafCustomerTracking
             20,
             1
         );
+
+        /*
+         * Additional fallback for themes/templates
+         * that do not execute the standard hook above.
+         */
+        add_action(
+            'woocommerce_view_order',
+            [$this, 'renderTrackingById'],
+            20,
+            1
+        );
     }
 
     /**
-     * Render Speedaf tracking information.
+     * Render from WC_Order.
      */
     public function renderTracking($order): void
     {
@@ -32,14 +44,44 @@ class SpeedafCustomerTracking
             return;
         }
 
+        $this->render($order);
+    }
+
+    /**
+     * Fallback render from order ID.
+     */
+    public function renderTrackingById($orderId): void
+    {
+        $orderId = absint($orderId);
+
+        if (!$orderId) {
+            return;
+        }
+
+        $order = wc_get_order($orderId);
+
+        if (!$order instanceof WC_Order) {
+            return;
+        }
+
+        $this->render($order);
+    }
+
+    /**
+     * Main tracking renderer.
+     */
+    private function render(WC_Order $order): void
+    {
+        if (self::$rendered) {
+            return;
+        }
+
         $orderId = $order->get_id();
 
-        /**
-         * Only display tracking if
-         * a Speedaf shipment exists.
+        /*
+         * Only show tracking for Speedaf shipments.
          */
-        $billCode = get_post_meta(
-            $orderId,
+        $billCode = $order->get_meta(
             '_speedaf_bill_code',
             true
         );
@@ -48,49 +90,77 @@ class SpeedafCustomerTracking
             return;
         }
 
-        /**
-         * Retrieve latest tracking data.
-         */
-        $status = get_post_meta(
-            $orderId,
+        self::$rendered = true;
+
+        $status = $order->get_meta(
             '_speedaf_status',
             true
         );
 
-        $message = get_post_meta(
-            $orderId,
+        $message = $order->get_meta(
             '_speedaf_tracking_message',
             true
         );
 
-        $trackingTime = get_post_meta(
-            $orderId,
+        $trackingTime = $order->get_meta(
             '_speedaf_tracking_time',
             true
         );
 
-        $history = get_post_meta(
-            $orderId,
+        $history = $order->get_meta(
             '_speedaf_tracking_history',
             true
         );
+
+        /*
+         * Older versions of the plugin may have stored
+         * tracking history as JSON.
+         */
+        if (is_string($history) && !empty($history)) {
+            $decodedHistory = json_decode(
+                $history,
+                true
+            );
+
+            if (is_array($decodedHistory)) {
+                $history = $decodedHistory;
+            }
+        }
 
         if (!is_array($history)) {
             $history = [];
         }
 
-        /**
-         * Convert Speedaf status code
-         * into customer-friendly wording.
+        /*
+         * Sort newest first.
          */
-        $statusLabel = $this->getStatusLabel($status);
+        if (!empty($history)) {
+            usort(
+                $history,
+                function ($a, $b) {
+                    $timeA = isset($a['time'])
+                        ? strtotime($a['time'])
+                        : 0;
+
+                    $timeB = isset($b['time'])
+                        ? strtotime($b['time'])
+                        : 0;
+
+                    return $timeB <=> $timeA;
+                }
+            );
+        }
+
+        $statusLabel = $this->getStatusLabel(
+            (string) $status
+        );
 
         ?>
-
         <section
             class="sefrelshop-speedaf-tracking"
             style="
                 margin-top: 30px;
+                margin-bottom: 30px;
                 padding: 24px;
                 border: 1px solid #e5e5e5;
                 border-radius: 8px;
@@ -104,7 +174,7 @@ class SpeedafCustomerTracking
 
             <div
                 class="sefrelshop-tracking-summary"
-                style="margin-bottom: 24px;"
+                style="margin-bottom: 25px;"
             >
 
                 <p>
@@ -138,18 +208,12 @@ class SpeedafCustomerTracking
             </div>
 
             <?php
-            /**
-             * Delivery progress indicator.
-             */
-            $this->renderProgress($status);
+            $this->renderProgress(
+                (string) $status
+            );
             ?>
 
-            <?php
-            /**
-             * Tracking history.
-             */
-            if (!empty($history)) :
-            ?>
+            <?php if (!empty($history)) : ?>
 
                 <div
                     class="sefrelshop-tracking-history"
@@ -160,38 +224,37 @@ class SpeedafCustomerTracking
                         Tracking History
                     </h3>
 
-                    <?php
-                    /**
-                     * Show newest event first.
-                     */
-                    $history = array_reverse($history);
+                    <?php foreach ($history as $event) : ?>
 
-                    foreach ($history as $event) :
-
+                        <?php
                         if (!is_array($event)) {
                             continue;
                         }
 
                         $eventStatus = isset($event['action'])
-                            ? $event['action']
+                            ? (string) $event['action']
                             : '';
 
-                        $eventMessage = !empty($event['msgEng'])
-                            ? $event['msgEng']
-                            : (
-                                !empty($event['message'])
-                                    ? $event['message']
-                                    : ''
-                            );
+                        $eventMessage = '';
+
+                        if (!empty($event['msgEng'])) {
+                            $eventMessage =
+                                $event['msgEng'];
+                        } elseif (!empty($event['message'])) {
+                            $eventMessage =
+                                $event['message'];
+                        } elseif (!empty($event['msgLoc'])) {
+                            $eventMessage =
+                                $event['msgLoc'];
+                        }
 
                         $eventTime = isset($event['time'])
-                            ? $event['time']
+                            ? (string) $event['time']
                             : '';
 
                         $eventCountry = isset($event['country'])
-                            ? $event['country']
+                            ? (string) $event['country']
                             : '';
-
                         ?>
 
                         <div
@@ -202,7 +265,7 @@ class SpeedafCustomerTracking
                             "
                         >
 
-                            <p style="margin: 0 0 5px;">
+                            <p style="margin: 0 0 6px;">
                                 <strong>
                                     <?php
                                     echo esc_html(
@@ -216,7 +279,7 @@ class SpeedafCustomerTracking
 
                             <?php if (!empty($eventMessage)) : ?>
 
-                                <p style="margin: 0 0 5px;">
+                                <p style="margin: 0 0 6px;">
                                     <?php
                                     echo esc_html(
                                         $eventMessage
@@ -257,21 +320,23 @@ class SpeedafCustomerTracking
 
                 </div>
 
+            <?php else : ?>
+
+                <p>
+                    Tracking information is not available yet.
+                </p>
+
             <?php endif; ?>
 
         </section>
-
         <?php
     }
 
     /**
-     * Render delivery progress.
+     * Render shipment progress.
      */
     private function renderProgress(string $status): void
     {
-        /**
-         * Main delivery stages.
-         */
         $stages = [
             '10' => 'Order Confirmed',
             '1'  => 'Picked Up',
@@ -281,20 +346,53 @@ class SpeedafCustomerTracking
             '5'  => 'Delivered',
         ];
 
-        /**
-         * Determine current position.
+        /*
+         * Convert internal statuses used by TrackingSync
+         * into equivalent Speedaf progress codes.
          */
+        $internalMap = [
+            'processing' =>
+                '10',
+
+            'created' =>
+                '10',
+
+            'tracking_subscribed' =>
+                '10',
+
+            'picked_up' =>
+                '1',
+
+            'in_transit' =>
+                '2',
+
+            'out_for_delivery' =>
+                '4',
+
+            'delivered' =>
+                '5',
+
+            'returning' =>
+                '-710',
+
+            'returned' =>
+                '730',
+        ];
+
+        if (
+            isset($internalMap[$status])
+        ) {
+            $status = $internalMap[$status];
+        }
+
         $stageKeys = array_keys($stages);
 
         $currentIndex = array_search(
-            (string) $status,
+            $status,
             $stageKeys,
             true
         );
 
-        /**
-         * Unknown / special status.
-         */
         if ($currentIndex === false) {
             $currentIndex = 0;
         }
@@ -315,7 +413,8 @@ class SpeedafCustomerTracking
                     true
                 );
 
-                $completed = $stageIndex <= $currentIndex;
+                $completed =
+                    $stageIndex <= $currentIndex;
                 ?>
 
                 <div
@@ -340,7 +439,9 @@ class SpeedafCustomerTracking
                         "
                     >
                         <?php
-                        echo $completed ? '✓' : '';
+                        echo $completed
+                            ? '✓'
+                            : '';
                         ?>
                     </span>
 
@@ -360,55 +461,110 @@ class SpeedafCustomerTracking
     }
 
     /**
-     * Convert Speedaf status codes
-     * into customer-friendly labels.
+     * Convert Speedaf status codes into
+     * customer-friendly labels.
      */
-    private function getStatusLabel(string $status): string
-    {
+    private function getStatusLabel(
+        string $status
+    ): string {
+
         $statuses = [
 
-            '10' => 'Order Confirmed',
+            '10' =>
+                'Order Confirmed',
 
-            '1' => 'Picked Up',
+            '1' =>
+                'Picked Up',
 
-            '2' => 'In Transit',
+            '2' =>
+                'In Transit',
 
-            '3' => 'Arrived',
+            '3' =>
+                'Arrived',
 
-            '4' => 'Out for Delivery',
+            '4' =>
+                'Out for Delivery',
 
-            '5' => 'Delivered',
+            '5' =>
+                'Delivered',
 
-            '-10' => 'Cancelled',
+            '-10' =>
+                'Cancelled',
 
-            '-710' => 'Returning',
+            '-710' =>
+                'Returning',
 
-            '730' => 'Returned',
+            '730' =>
+                'Returned',
 
-            '18' => 'Self Collection',
+            '18' =>
+                'Self Collection',
 
-            '16' => 'Delivered by Franchisee',
+            '16' =>
+                'Delivered by Franchisee',
 
-            '150' => 'Inbound',
+            '150' =>
+                'Inbound',
 
-            '181' => 'Packaged',
+            '181' =>
+                'Packaged',
 
-            '190' => 'Outbound',
+            '190' =>
+                'Outbound',
 
-            '402' => 'Customs Declaration',
+            '402' =>
+                'Customs Declaration',
 
-            '220' => 'Flight Departed',
+            '220' =>
+                'Flight Departed',
 
-            '230' => 'Flight Landed',
+            '230' =>
+                'Flight Landed',
 
-            '360' => 'In Clearance',
+            '360' =>
+                'In Clearance',
 
-            '401' => 'Clearance Exception',
+            '401' =>
+                'Clearance Exception',
 
-            '370' => 'Clearance Completed',
+            '370' =>
+                'Clearance Completed',
 
+            'processing' =>
+                'Processing',
+
+            'created' =>
+                'Shipment Created',
+
+            'tracking_subscribed' =>
+                'Tracking Active',
+
+            'tracking_subscription_failed' =>
+                'Tracking Subscription Requires Attention',
+
+            'picked_up' =>
+                'Picked Up',
+
+            'in_transit' =>
+                'In Transit',
+
+            'out_for_delivery' =>
+                'Out for Delivery',
+
+            'delivered' =>
+                'Delivered',
+
+            'returning' =>
+                'Returning',
+
+            'returned' =>
+                'Returned',
+
+            'action_required' =>
+                'Action Required',
         ];
 
-        return $statuses[$status] ?? 'Shipment In Progress';
+        return $statuses[$status]
+            ?? 'Shipment In Progress';
     }
 }
