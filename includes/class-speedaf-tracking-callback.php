@@ -1,3 +1,4 @@
+```php
 <?php
 
 if (!defined('ABSPATH')) {
@@ -6,9 +7,6 @@ if (!defined('ABSPATH')) {
 
 class SpeedafTrackingCallback
 {
-    /**
-     * Register REST API endpoint.
-     */
     public function registerRoutes(): void
     {
         register_rest_route(
@@ -23,78 +21,14 @@ class SpeedafTrackingCallback
     }
 
     /**
-     * Map Speedaf status codes to
-     * SefrelShop internal statuses.
-     */
-    private function mapStatus(string $action): array
-    {
-        $statuses = [
-            '10' => [
-                'key'   => 'ordered',
-                'label' => 'Order Confirmed',
-            ],
-
-            '1' => [
-                'key'   => 'picked_up',
-                'label' => 'Shipment Picked Up',
-            ],
-
-            '2' => [
-                'key'   => 'in_transit',
-                'label' => 'In Transit',
-            ],
-
-            '3' => [
-                'key'   => 'arrived',
-                'label' => 'Arrived at Destination',
-            ],
-
-            '4' => [
-                'key'   => 'out_for_delivery',
-                'label' => 'Out for Delivery',
-            ],
-
-            '5' => [
-                'key'   => 'delivered',
-                'label' => 'Delivered',
-            ],
-
-            '16' => [
-                'key'   => 'delivered',
-                'label' => 'Delivered',
-            ],
-
-            '-10' => [
-                'key'   => 'cancelled',
-                'label' => 'Cancelled',
-            ],
-
-            '-710' => [
-                'key'   => 'returning',
-                'label' => 'Returning',
-            ],
-
-            '730' => [
-                'key'   => 'returned',
-                'label' => 'Returned',
-            ],
-        ];
-
-        return $statuses[$action] ?? [
-            'key'   => 'unknown',
-            'label' => 'Shipment Update',
-        ];
-    }
-
-    /**
-     * Handle Speedaf tracking callback.
+     * Receive Speedaf tracking callback.
      */
     public function handle(WP_REST_Request $request)
     {
         $body = $request->get_body();
 
-        /**
-         * Development diagnostics.
+        /*
+         * Keep the raw callback for debugging.
          */
         if (defined('WP_DEBUG') && WP_DEBUG) {
             update_option(
@@ -103,9 +37,6 @@ class SpeedafTrackingCallback
             );
         }
 
-        /**
-         * Validate body.
-         */
         if (empty($body)) {
             return new WP_REST_Response(
                 [
@@ -116,13 +47,7 @@ class SpeedafTrackingCallback
             );
         }
 
-        /**
-         * Decode JSON.
-         */
-        $data = json_decode(
-            $body,
-            true
-        );
+        $data = json_decode($body, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             return new WP_REST_Response(
@@ -134,10 +59,15 @@ class SpeedafTrackingCallback
             );
         }
 
-        /**
-         * Speedaf normally sends an array.
+        /*
+         * Speedaf may send either:
          *
-         * We also accept a single event object.
+         * {
+         *   "mailNo": "...",
+         *   "action": "4"
+         * }
+         *
+         * or an array of events.
          */
         if (
             isset($data['mailNo']) ||
@@ -160,9 +90,6 @@ class SpeedafTrackingCallback
         $duplicates = 0;
         $failed = 0;
 
-        /**
-         * Process each tracking event.
-         */
         foreach ($data as $event) {
 
             if (!is_array($event)) {
@@ -181,10 +108,6 @@ class SpeedafTrackingCallback
             }
         }
 
-        /**
-         * Speedaf expects a successful response
-         * when the callback has been received.
-         */
         return new WP_REST_Response(
             [
                 'success'    => true,
@@ -198,17 +121,9 @@ class SpeedafTrackingCallback
 
     /**
      * Process one Speedaf tracking event.
-     *
-     * Returns:
-     * - processed
-     * - duplicate
-     * - failed
      */
     private function processEvent(array $event): string
     {
-        /**
-         * Extract waybill.
-         */
         $mailNo = isset($event['mailNo'])
             ? sanitize_text_field($event['mailNo'])
             : '';
@@ -217,48 +132,8 @@ class SpeedafTrackingCallback
             return 'failed';
         }
 
-        /**
-         * Extract tracking fields.
-         */
-        $action = isset($event['action'])
-            ? sanitize_text_field($event['action'])
-            : '';
-
-        $subAction = isset($event['subAction'])
-            ? sanitize_text_field($event['subAction'])
-            : '';
-
-        $message = isset($event['message'])
-            ? sanitize_text_field($event['message'])
-            : '';
-
-        $msgEng = isset($event['msgEng'])
-            ? sanitize_text_field($event['msgEng'])
-            : '';
-
-        $msgLoc = isset($event['msgLoc'])
-            ? sanitize_text_field($event['msgLoc'])
-            : '';
-
-        $time = isset($event['time'])
-            ? sanitize_text_field($event['time'])
-            : '';
-
-        $country = isset($event['country'])
-            ? sanitize_text_field($event['country'])
-            : '';
-
-        $countryCode = isset($event['countryCode'])
-            ? sanitize_text_field($event['countryCode'])
-            : '';
-
-        $pictureUrl = isset($event['pictureUrl'])
-            ? esc_url_raw($event['pictureUrl'])
-            : '';
-
-        /**
-         * Find WooCommerce order using
-         * the Speedaf bill code.
+        /*
+         * Find WooCommerce order using the Speedaf waybill.
          */
         $orders = wc_get_orders(
             [
@@ -269,9 +144,22 @@ class SpeedafTrackingCallback
             ]
         );
 
-        /**
-         * No matching order.
+        /*
+         * Fallback: try the customer order number if
+         * the waybill lookup doesn't find the order.
          */
+        if (empty($orders)) {
+
+            $orders = wc_get_orders(
+                [
+                    'limit'      => 1,
+                    'type'       => 'shop_order',
+                    'meta_key'   => '_speedaf_customer_order_no',
+                    'meta_value' => $mailNo,
+                ]
+            );
+        }
+
         if (empty($orders)) {
 
             if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -284,158 +172,160 @@ class SpeedafTrackingCallback
             return 'failed';
         }
 
+        /** @var WC_Order $order */
         $order = $orders[0];
-        $orderId = $order->get_id();
 
-        /**
-         * Create a unique fingerprint for this
-         * tracking event.
+        /*
+         * Extract event values.
+         */
+        $action = isset($event['action'])
+            ? sanitize_text_field((string) $event['action'])
+            : '';
+
+        $subAction = isset($event['subAction'])
+            ? sanitize_text_field((string) $event['subAction'])
+            : '';
+
+        $message = isset($event['message'])
+            ? sanitize_text_field((string) $event['message'])
+            : '';
+
+        $msgEng = isset($event['msgEng'])
+            ? sanitize_text_field((string) $event['msgEng'])
+            : '';
+
+        $msgLoc = isset($event['msgLoc'])
+            ? sanitize_text_field((string) $event['msgLoc'])
+            : '';
+
+        $time = isset($event['time'])
+            ? sanitize_text_field((string) $event['time'])
+            : '';
+
+        $country = isset($event['country'])
+            ? sanitize_text_field((string) $event['country'])
+            : '';
+
+        $countryCode = isset($event['countryCode'])
+            ? sanitize_text_field((string) $event['countryCode'])
+            : '';
+
+        $pictureUrl = isset($event['pictureUrl'])
+            ? esc_url_raw($event['pictureUrl'])
+            : '';
+
+        /*
+         * Create a stable fingerprint for this event.
          *
-         * This prevents Speedaf sending the same
-         * event multiple times from creating
-         * duplicate history records.
+         * This prevents Speedaf retries from creating
+         * duplicate tracking history.
          */
         $eventFingerprint = md5(
-            $mailNo
-            . '|'
-            . $action
-            . '|'
-            . $subAction
-            . '|'
-            . $time
-            . '|'
-            . ($msgEng ?: $message)
+            $mailNo .
+            '|' .
+            $action .
+            '|' .
+            $subAction .
+            '|' .
+            $time .
+            '|' .
+            $msgEng .
+            '|' .
+            $message
         );
 
-        /**
-         * Retrieve tracking history.
+        /*
+         * Read tracking history using WooCommerce CRUD.
          */
-        $history = get_post_meta(
-            $orderId,
+        $history = $order->get_meta(
             '_speedaf_tracking_history',
             true
         );
+
+        /*
+         * Backward compatibility:
+         *
+         * Older versions stored the history using
+         * update_post_meta(). Import that data if it
+         * exists but WooCommerce CRUD does not see it.
+         */
+        if (empty($history)) {
+
+            $legacyHistory = get_post_meta(
+                $order->get_id(),
+                '_speedaf_tracking_history',
+                true
+            );
+
+            if (is_string($legacyHistory) && !empty($legacyHistory)) {
+
+                $decoded = json_decode(
+                    $legacyHistory,
+                    true
+                );
+
+                if (is_array($decoded)) {
+                    $history = $decoded;
+                }
+
+            } elseif (is_array($legacyHistory)) {
+
+                $history = $legacyHistory;
+            }
+        }
 
         if (!is_array($history)) {
             $history = [];
         }
 
-        /**
-         * Check whether this event already exists.
+        /*
+         * Check whether this exact event already exists.
          */
         foreach ($history as $existingEvent) {
 
-            if (
-                isset($existingEvent['fingerprint']) &&
-                $existingEvent['fingerprint'] === $eventFingerprint
-            ) {
+            if (!is_array($existingEvent)) {
+                continue;
+            }
+
+            $existingFingerprint = md5(
+                ($existingEvent['mailNo'] ?? '') .
+                '|' .
+                ($existingEvent['action'] ?? '') .
+                '|' .
+                ($existingEvent['subAction'] ?? '') .
+                '|' .
+                ($existingEvent['time'] ?? '') .
+                '|' .
+                ($existingEvent['msgEng'] ?? '') .
+                '|' .
+                ($existingEvent['message'] ?? '')
+            );
+
+            if ($existingFingerprint === $eventFingerprint) {
+
+                /*
+                 * Even if this event already exists,
+                 * make sure the history is stored through
+                 * WooCommerce CRUD.
+                 */
+                $order->update_meta_data(
+                    '_speedaf_tracking_history',
+                    $history
+                );
+
+                $order->save();
+
                 return 'duplicate';
             }
         }
 
-        /**
-         * Convert Speedaf status into
-         * SefrelShop's internal status.
-         */
-        $status = $this->mapStatus($action);
-
-        /**
-         * Latest customer-facing message.
-         */
-        $displayMessage = $msgEng ?: ($msgLoc ?: $message);
-
-        /**
-         * Store latest tracking information.
-         */
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_action',
-            $action
-        );
-
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_sub_action',
-            $subAction
-        );
-
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_message',
-            $displayMessage
-        );
-
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_time',
-            $time
-        );
-
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_country',
-            $country
-        );
-
-        update_post_meta(
-            $orderId,
-            '_speedaf_tracking_country_code',
-            $countryCode
-        );
-
-        if (!empty($pictureUrl)) {
-            update_post_meta(
-                $orderId,
-                '_speedaf_tracking_picture',
-                $pictureUrl
-            );
-        }
-
-        /**
-         * Preserve original Speedaf status code.
-         */
-        update_post_meta(
-            $orderId,
-            '_speedaf_status',
-            $action
-        );
-
-        /**
-         * Store normalized SefrelShop status.
-         */
-        update_post_meta(
-            $orderId,
-            '_sefrelshop_shipping_status',
-            $status['key']
-        );
-
-        update_post_meta(
-            $orderId,
-            '_sefrelshop_shipping_status_label',
-            $status['label']
-        );
-
-        /**
-         * Store the latest tracking event time.
-         */
-        if (!empty($time)) {
-            update_post_meta(
-                $orderId,
-                '_sefrelshop_shipping_updated_at',
-                $time
-            );
-        }
-
-        /**
-         * Add event to tracking history.
+        /*
+         * Add the new event.
          */
         $history[] = [
-            'fingerprint' => $eventFingerprint,
             'mailNo'      => $mailNo,
             'action'      => $action,
             'subAction'   => $subAction,
-            'status_key'  => $status['key'],
-            'status_label'=> $status['label'],
             'message'     => $message,
             'msgEng'      => $msgEng,
             'msgLoc'      => $msgLoc,
@@ -443,22 +333,114 @@ class SpeedafTrackingCallback
             'pictureUrl'  => $pictureUrl,
             'country'     => $country,
             'countryCode' => $countryCode,
+            'fingerprint' => $eventFingerprint,
             'received_at' => current_time('mysql'),
         ];
 
-        update_post_meta(
-            $orderId,
+        /*
+         * Sort history oldest → newest.
+         */
+        usort(
+            $history,
+            function ($a, $b) {
+
+                $timeA = isset($a['time'])
+                    ? strtotime($a['time'])
+                    : 0;
+
+                $timeB = isset($b['time'])
+                    ? strtotime($b['time'])
+                    : 0;
+
+                return $timeA <=> $timeB;
+            }
+        );
+
+        /*
+         * Save the latest tracking information.
+         */
+        $order->update_meta_data(
+            '_speedaf_tracking_action',
+            $action
+        );
+
+        $order->update_meta_data(
+            '_speedaf_tracking_sub_action',
+            $subAction
+        );
+
+        $displayMessage = $msgEng ?: ($message ?: $msgLoc);
+
+        $order->update_meta_data(
+            '_speedaf_tracking_message',
+            $displayMessage
+        );
+
+        $order->update_meta_data(
+            '_speedaf_tracking_time',
+            $time
+        );
+
+        $order->update_meta_data(
+            '_speedaf_tracking_country',
+            $country
+        );
+
+        $order->update_meta_data(
+            '_speedaf_tracking_country_code',
+            $countryCode
+        );
+
+        if (!empty($pictureUrl)) {
+
+            $order->update_meta_data(
+                '_speedaf_tracking_picture',
+                $pictureUrl
+            );
+        }
+
+        /*
+         * This is the important part:
+         *
+         * Customer tracking now receives the complete
+         * Speedaf history through WooCommerce CRUD.
+         */
+        $order->update_meta_data(
             '_speedaf_tracking_history',
             $history
         );
 
-        /**
-         * Add WooCommerce order note.
+        /*
+         * The latest Speedaf action becomes the current
+         * shipment status.
+         *
+         * DO NOT set this to "tracking_subscribed".
          */
-        $note = 'Speedaf tracking update: ' . $status['label'];
+        if (!empty($action)) {
+
+            $order->update_meta_data(
+                '_speedaf_status',
+                $action
+            );
+        }
+
+        /*
+         * Record when the callback was processed.
+         */
+        $order->update_meta_data(
+            '_speedaf_last_tracking_update',
+            current_time('mysql')
+        );
+
+        $order->save();
+
+        /*
+         * Add an internal WooCommerce order note.
+         */
+        $note = 'Speedaf tracking update';
 
         if (!empty($displayMessage)) {
-            $note .= ' — ' . $displayMessage;
+            $note .= ': ' . $displayMessage;
         }
 
         if (!empty($action)) {
@@ -466,68 +448,6 @@ class SpeedafTrackingCallback
         }
 
         $order->add_order_note($note);
-
-        /**
-         * Handle important shipment states.
-         *
-         * IMPORTANT:
-         * We do NOT automatically mark the
-         * WooCommerce order completed when
-         * Speedaf reports "In delivery".
-         */
-        if ($status['key'] === 'delivered') {
-
-            update_post_meta(
-                $orderId,
-                '_sefrelshop_delivery_confirmed_by_carrier',
-                'yes'
-            );
-
-            update_post_meta(
-                $orderId,
-                '_sefrelshop_delivery_confirmed_at',
-                current_time('mysql')
-            );
-
-            $order->add_order_note(
-                'Speedaf has reported this shipment as delivered. Awaiting customer confirmation.'
-            );
-        }
-
-        /**
-         * Returning shipment.
-         */
-        if ($status['key'] === 'returning') {
-
-            $order->add_order_note(
-                'Speedaf has reported that this shipment is being returned.'
-            );
-        }
-
-        /**
-         * Returned shipment.
-         */
-        if ($status['key'] === 'returned') {
-
-            $order->add_order_note(
-                'Speedaf has reported that this shipment has been returned.'
-            );
-        }
-
-        /**
-         * Cancelled shipment.
-         */
-        if ($status['key'] === 'cancelled') {
-
-            $order->add_order_note(
-                'Speedaf has reported that this shipment was cancelled.'
-            );
-        }
-
-        /**
-         * Clear WordPress caches where available.
-         */
-        clean_post_cache($orderId);
 
         return 'processed';
     }
