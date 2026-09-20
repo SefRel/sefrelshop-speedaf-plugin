@@ -333,132 +333,100 @@ class SpeedafCustomerTracking
     }
 
     /**
-     * Render shipment progress.
-     */
-    private function renderProgress(string $status): void
-    {
-        $stages = [
-            '10' => 'Order Confirmed',
-            '1'  => 'Picked Up',
-            '2'  => 'In Transit',
-            '3'  => 'Arrived',
-            '4'  => 'Out for Delivery',
-            '5'  => 'Delivered',
-        ];
-
-        /*
-         * Convert internal statuses used by TrackingSync
-         * into equivalent Speedaf progress codes.
+         * Render shipment progress.
          */
-        $internalMap = [
-            'processing' =>
-                '10',
+        private function renderProgress(string $status): void
+        {
+            $statusMap = [
+                '10' => 0,
+                '1'  => 1,
+                '2'  => 2,
+                '3'  => 3,
+                '4'  => 4,
+                '5'  => 5,
 
-            'created' =>
-                '10',
+                'shipment_created' => 0,
+                'processing'       => 0,
+                'created'          => 0,
+                'tracking_subscribed' => 0,
 
-            'tracking_subscribed' =>
-                '10',
+                'picked_up'        => 1,
+                'in_transit'       => 2,
+                'arrived'          => 3,
+                'out_for_delivery' => 4,
+                'delivered'        => 5,
+            ];
 
-            'picked_up' =>
-                '1',
+            $currentIndex = $statusMap[$status] ?? 0;
 
-            'in_transit' =>
-                '2',
+            $stages = [
+                'Order Confirmed',
+                'Picked Up',
+                'In Transit',
+                'Arrived',
+                'Out for Delivery',
+                'Delivered',
+            ];
 
-            'out_for_delivery' =>
-                '4',
+            ?>
+            
+            <div
+                class="sefrelshop-tracking-progress"
+                style="
+                    margin: 30px 0;
+                "
+            >
 
-            'delivered' =>
-                '5',
+                <?php foreach ($stages as $index => $label) : ?>
 
-            'returning' =>
-                '-710',
+                    <?php
+                    $completed = $index <= $currentIndex;
+                    $active = $index === $currentIndex;
+                    ?>
 
-            'returned' =>
-                '730',
-        ];
-
-        if (
-            isset($internalMap[$status])
-        ) {
-            $status = $internalMap[$status];
-        }
-
-        $stageKeys = array_keys($stages);
-
-        $currentIndex = array_search(
-            $status,
-            $stageKeys,
-            true
-        );
-
-        if ($currentIndex === false) {
-            $currentIndex = 0;
-        }
-
-        ?>
-
-        <div
-            class="sefrelshop-tracking-progress"
-            style="margin: 30px 0;"
-        >
-
-            <?php foreach ($stages as $code => $label) : ?>
-
-                <?php
-                $stageIndex = array_search(
-                    $code,
-                    $stageKeys,
-                    true
-                );
-
-                $completed =
-                    $stageIndex <= $currentIndex;
-                ?>
-
-                <div
-                    style="
-                        display: flex;
-                        align-items: center;
-                        margin-bottom: 12px;
-                    "
-                >
-
-                    <span
+                    <div
                         style="
-                            display: inline-flex;
+                            display: flex;
                             align-items: center;
-                            justify-content: center;
-                            width: 28px;
-                            height: 28px;
-                            border-radius: 50%;
-                            border: 2px solid #ccc;
-                            margin-right: 10px;
-                            font-size: 13px;
+                            margin-bottom: 12px;
                         "
                     >
-                        <?php
-                        echo $completed
-                            ? '✓'
-                            : '';
-                        ?>
-                    </span>
 
-                    <span>
-                        <?php
-                        echo esc_html($label);
-                        ?>
-                    </span>
+                        <span
+                            style="
+                                display: inline-flex;
+                                align-items: center;
+                                justify-content: center;
+                                width: 28px;
+                                height: 28px;
+                                min-width: 28px;
+                                border-radius: 50%;
+                                border: 2px solid #ccc;
+                                margin-right: 10px;
+                                font-size: 13px;
+                                font-weight: bold;
+                            "
+                        >
+                            <?php echo $completed ? '✓' : ''; ?>
+                        </span>
 
-                </div>
+                        <span
+                            style="
+                                font-weight:
+                                <?php echo $active ? '700' : '400'; ?>;
+                            "
+                        >
+                            <?php echo esc_html($label); ?>
+                        </span>
 
-            <?php endforeach; ?>
+                    </div>
 
-        </div>
+                <?php endforeach; ?>
 
-        <?php
-    }
+            </div>
+
+            <?php
+        }
 
     /**
      * Convert Speedaf status codes into
@@ -567,4 +535,4 @@ class SpeedafCustomerTracking
         return $statuses[$status]
             ?? 'Shipment In Progress';
     }
-}
+    }
