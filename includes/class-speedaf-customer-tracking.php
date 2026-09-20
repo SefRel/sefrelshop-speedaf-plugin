@@ -333,100 +333,125 @@ class SpeedafCustomerTracking
     }
 
     /**
-         * Render shipment progress.
-         */
-        private function renderProgress(string $status): void
-        {
-            $statusMap = [
-                '10' => 0,
-                '1'  => 1,
-                '2'  => 2,
-                '3'  => 3,
-                '4'  => 4,
-                '5'  => 5,
+ * Render shipment progress.
+ */
+private function renderProgress(string $status): void
+{
+    $rawStatus = strtolower(trim((string) $status));
 
-                'shipment_created' => 0,
-                'processing'       => 0,
-                'created'          => 0,
-                'tracking_subscribed' => 0,
+    $statusMap = [
+        // Speedaf action codes
+        '10' => 0, // Created
+        '1'  => 1, // Picked Up
+        '2'  => 2, // In Transit
+        '3'  => 3, // Arrived
+        '4'  => 4, // Out for Delivery
+        '5'  => 5, // Delivered
+        '16' => 5, // Delivered
 
-                'picked_up'        => 1,
-                'in_transit'       => 2,
-                'arrived'          => 3,
-                'out_for_delivery' => 4,
-                'delivered'        => 5,
-            ];
+        // Internal status names
+        'shipment_created'   => 0,
+        'created'            => 0,
+        'tracking_subscribed'=> 0,
+        'processing'         => 0,
 
-            $currentIndex = $statusMap[$status] ?? 0;
+        'picked_up'          => 1,
+        'in_transit'         => 2,
+        'arrived'            => 3,
+        'out_for_delivery'   => 4,
+        'delivered'          => 5,
 
-            $stages = [
-                'Order Confirmed',
-                'Picked Up',
-                'In Transit',
-                'Arrived',
-                'Out for Delivery',
-                'Delivered',
-            ];
+        // Human-readable labels
+        'order confirmed'   => 0,
+        'picked up'         => 1,
+        'in transit'        => 2,
+        'arrived'           => 3,
+        'out for delivery'  => 4,
+        'delivered'         => 5,
+    ];
 
+    /*
+     * Sometimes the stored value can contain spaces, underscores,
+     * or a slightly different representation.
+     */
+    $normalisedStatus = str_replace(
+        ['-', '_'],
+        ' ',
+        $rawStatus
+    );
+
+    if (isset($statusMap[$rawStatus])) {
+        $currentIndex = $statusMap[$rawStatus];
+    } elseif (isset($statusMap[$normalisedStatus])) {
+        $currentIndex = $statusMap[$normalisedStatus];
+    } else {
+        $currentIndex = 0;
+    }
+
+    $stages = [
+        'Order Confirmed',
+        'Picked Up',
+        'In Transit',
+        'Arrived',
+        'Out for Delivery',
+        'Delivered',
+    ];
+    ?>
+
+    <div class="sefrelshop-tracking-progress" style="margin: 30px 0;">
+
+        <?php foreach ($stages as $index => $label) : ?>
+
+            <?php
+            $completed = ($index <= $currentIndex);
+            $active    = ($index === $currentIndex);
             ?>
-            
+
             <div
-                class="sefrelshop-tracking-progress"
+                class="sefrelshop-tracking-stage <?php echo $active ? 'is-active' : ''; ?>"
                 style="
-                    margin: 30px 0;
+                    display:flex;
+                    align-items:center;
+                    margin-bottom:12px;
                 "
             >
 
-                <?php foreach ($stages as $index => $label) : ?>
+                <span
+                    class="sefrelshop-tracking-circle"
+                    style="
+                        display:inline-flex;
+                        align-items:center;
+                        justify-content:center;
+                        width:28px;
+                        height:28px;
+                        min-width:28px;
+                        border-radius:50%;
+                        border:2px solid <?php echo $completed ? '#008000' : '#ccc'; ?>;
+                        background:<?php echo $completed ? '#fff' : '#fff'; ?>;
+                        margin-right:10px;
+                        font-size:13px;
+                        font-weight:bold;
+                    "
+                >
+                    <?php echo $completed ? '✓' : ''; ?>
+                </span>
 
-                    <?php
-                    $completed = $index <= $currentIndex;
-                    $active = $index === $currentIndex;
-                    ?>
-
-                    <div
-                        style="
-                            display: flex;
-                            align-items: center;
-                            margin-bottom: 12px;
-                        "
-                    >
-
-                        <span
-                            style="
-                                display: inline-flex;
-                                align-items: center;
-                                justify-content: center;
-                                width: 28px;
-                                height: 28px;
-                                min-width: 28px;
-                                border-radius: 50%;
-                                border: 2px solid #ccc;
-                                margin-right: 10px;
-                                font-size: 13px;
-                                font-weight: bold;
-                            "
-                        >
-                            <?php echo $completed ? '✓' : ''; ?>
-                        </span>
-
-                        <span
-                            style="
-                                font-weight:
-                                <?php echo $active ? '700' : '400'; ?>;
-                            "
-                        >
-                            <?php echo esc_html($label); ?>
-                        </span>
-
-                    </div>
-
-                <?php endforeach; ?>
+                <span
+                    style="
+                        font-weight:<?php echo $active ? '700' : '400'; ?>;
+                    "
+                >
+                    <?php echo esc_html($label); ?>
+                </span>
 
             </div>
 
-            <?php
-        }
+        <?php endforeach; ?>
+
+    </div>
+
+    <?php
+}
 
     /**
      * Convert Speedaf status codes into
