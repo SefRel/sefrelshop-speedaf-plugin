@@ -80,7 +80,7 @@ class SpeedafTrackingSimulator
 
         <div class="wrap">
 
-            <h1>Speedaf Tracking Test</h1>
+            <h1>SefrelShop Tracking Test</h1>
 
             <p>
                 Use this tool to simulate Speedaf tracking updates for testing.
