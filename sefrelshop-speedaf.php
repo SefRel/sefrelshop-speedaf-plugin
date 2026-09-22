@@ -32,6 +32,7 @@ require_once __DIR__ . '/includes/class-order-processor.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-sync.php';
 require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
+require_once __DIR__ . '/includes/class-speedaf-tracking-simulator.php';
 require_once __DIR__ . '/includes/class-speedaf-delivery-confirmation.php';
 require_once __DIR__ . '/includes/class-plugin.php';
 
@@ -241,4 +242,22 @@ function sefrelshop_register_delivery_confirmation(): void
 {
     $confirmation = new SpeedafDeliveryConfirmation();
     $confirmation->registerHooks();
+}
+
+/*
+|--------------------------------------------------------------------------
+| Speedaf Tracking Simulator
+|--------------------------------------------------------------------------
+*/
+
+add_action(
+    'init',
+    'sefrelshop_register_tracking_simulator'
+);
+
+function sefrelshop_register_tracking_simulator(): void
+{
+    $simulator = new SpeedafTrackingSimulator();
+
+    $simulator->registerHooks();
 }
