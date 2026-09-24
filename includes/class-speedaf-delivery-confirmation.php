@@ -10,8 +10,8 @@ if (!defined('ABSPATH')) {
  * Handles:
  * - Customer confirms order received
  * - Customer reports delivery problem
- * - Vendor notification
  * - Admin notification
+ * - Vendor notification
  * - WooCommerce order completion
  */
 class SpeedafDeliveryConfirmation
@@ -22,8 +22,7 @@ class SpeedafDeliveryConfirmation
     public function registerHooks(): void
     {
         /*
-         * Display delivery confirmation actions
-         * on the WooCommerce customer order page.
+         * Display delivery confirmation section.
          */
         add_action(
             'woocommerce_order_details_after_order_table',
@@ -33,12 +32,11 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Process customer delivery actions.
+         * Process customer actions.
          *
-         * We intentionally use template_redirect instead of
-         * admin-post.php because the previous admin-post flow
-         * was redirecting the customer to the homepage before
-         * the action could be completed.
+         * We use template_redirect instead of admin-post.php
+         * because admin-post.php was previously redirecting
+         * the customer to the homepage.
          */
         add_action(
             'template_redirect',
@@ -48,7 +46,7 @@ class SpeedafDeliveryConfirmation
     }
 
     /**
-     * Process customer delivery actions.
+     * Handle customer POST actions.
      */
     public function handleCustomerAction(): void
     {
@@ -60,18 +58,20 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Check whether this is one of our forms.
+         * Make sure this is one of our forms.
          */
         if (empty($_POST['sefrelshop_delivery_action'])) {
             return;
         }
 
         $action = sanitize_key(
-            wp_unslash($_POST['sefrelshop_delivery_action'])
+            wp_unslash(
+                $_POST['sefrelshop_delivery_action']
+            )
         );
 
         /*
-         * Only allow our two supported actions.
+         * Only allow our two actions.
          */
         if (
             !in_array(
@@ -139,13 +139,11 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Make sure the logged-in customer owns this order.
+         * Verify order ownership.
          */
-        $currentUserId = get_current_user_id();
-
         if (
             (int) $order->get_user_id() !==
-            (int) $currentUserId
+            (int) get_current_user_id()
         ) {
             wp_die(
                 esc_html__(
@@ -163,16 +161,35 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Verify security nonce.
+         * Verify nonce.
          */
         if (
-            empty($_POST['sefrelshop_delivery_nonce']) ||
-            !wp_verify_nonce(
-                sanitize_text_field(
-                    wp_unslash(
-                        $_POST['sefrelshop_delivery_nonce']
-                    )
+            empty($_POST['sefrelshop_delivery_nonce'])
+        ) {
+            wp_die(
+                esc_html__(
+                    'Security verification failed.',
+                    'sefrelshop-speedaf'
                 ),
+                esc_html__(
+                    'Security Error',
+                    'sefrelshop-speedaf'
+                ),
+                [
+                    'response' => 403
+                ]
+            );
+        }
+
+        $nonce = sanitize_text_field(
+            wp_unslash(
+                $_POST['sefrelshop_delivery_nonce']
+            )
+        );
+
+        if (
+            !wp_verify_nonce(
+                $nonce,
                 'sefrelshop_delivery_action_' . $orderId
             )
         ) {
@@ -192,7 +209,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Make sure this is a Speedaf order.
+         * Must have Speedaf shipment.
          */
         $billCode = $order->get_meta(
             '_speedaf_bill_code',
@@ -216,7 +233,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Verify Speedaf has marked the order as delivered.
+         * Verify Speedaf delivery.
          */
         if (!$this->isOrderDelivered($order)) {
             wp_die(
@@ -235,7 +252,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Process confirmation.
+         * Confirm order.
          */
         if ($action === 'confirm_order_received') {
             $this->confirmOrderReceived($order);
@@ -243,7 +260,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Process problem report.
+         * Report problem.
          */
         if ($action === 'report_delivery_problem') {
             $this->reportDeliveryProblem($order);
@@ -252,14 +269,12 @@ class SpeedafDeliveryConfirmation
     }
 
     /**
-     * Determine whether Speedaf has marked an order as delivered.
-     *
-     * Checks both the current Speedaf status and tracking history.
+     * Determine whether the order has been delivered.
      */
     private function isOrderDelivered(WC_Order $order): bool
     {
         /*
-         * Current Speedaf status.
+         * Check current Speedaf status.
          */
         $speedafStatus = strtolower(
             trim(
@@ -270,9 +285,6 @@ class SpeedafDeliveryConfirmation
             )
         );
 
-        /*
-         * Known delivered statuses.
-         */
         $deliveredStatuses = [
             '5',
             '16',
@@ -293,7 +305,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Check tracking history as a fallback.
+         * Check tracking history.
          */
         $history = $order->get_meta(
             '_speedaf_tracking_history',
@@ -301,9 +313,10 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Support JSON history.
+         * Handle JSON history.
          */
         if (is_string($history)) {
+
             $decoded = json_decode(
                 $history,
                 true
@@ -319,7 +332,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Inspect tracking events.
+         * Inspect events.
          */
         foreach ($history as $event) {
 
@@ -357,7 +370,7 @@ class SpeedafDeliveryConfirmation
             );
 
             /*
-             * Speedaf delivered status.
+             * Speedaf delivered codes.
              */
             if (
                 $action === '5' ||
@@ -369,7 +382,7 @@ class SpeedafDeliveryConfirmation
             }
 
             /*
-             * Explicit delivery wording.
+             * Delivery text fallback.
              */
             if (
                 strpos(
@@ -389,12 +402,12 @@ class SpeedafDeliveryConfirmation
     }
 
     /**
-     * Render delivery confirmation actions.
+     * Render customer delivery actions.
      */
     public function renderDeliveryActions($order): void
     {
         /*
-         * Validate WooCommerce order.
+         * Make sure this is a WooCommerce order.
          */
         if (!$order instanceof WC_Order) {
             return;
@@ -408,7 +421,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Customer must own order.
+         * Customer must own the order.
          */
         if (
             (int) $order->get_user_id() !==
@@ -418,7 +431,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * This must be a Speedaf order.
+         * Must have Speedaf shipment.
          */
         $billCode = $order->get_meta(
             '_speedaf_bill_code',
@@ -430,14 +443,14 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Only display actions after Speedaf delivery.
+         * Only show after delivery.
          */
         if (!$this->isOrderDelivered($order)) {
             return;
         }
 
         /*
-         * Check whether customer has already confirmed receipt.
+         * Confirmation state.
          */
         $confirmed = $order->get_meta(
             '_sefrelshop_order_received_confirmed',
@@ -445,7 +458,7 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Check whether customer has already reported a problem.
+         * Problem state.
          */
         $problemReported = $order->get_meta(
             '_sefrelshop_delivery_problem_reported',
@@ -453,16 +466,29 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Main section.
+         * -----------------------------------------------------
+         * SECTION
+         * -----------------------------------------------------
          */
-        echo '<section class="sefrelshop-delivery-confirmation" style="
-            margin-top:30px;
-            padding:25px;
-            border:1px solid #e5e5e5;
-            border-radius:8px;
-        ">';
 
-        echo '<h2 style="margin-top:0;">';
+        echo '<section
+            class="sefrelshop-delivery-confirmation"
+            style="
+                display:block !important;
+                clear:both;
+                width:100%;
+                margin-top:30px;
+                padding:25px;
+                box-sizing:border-box;
+                border:1px solid #e5e5e5;
+                border-radius:8px;
+            "
+        >';
+
+        echo '<h2 style="
+            display:block !important;
+            margin-top:0;
+        ">';
 
         echo esc_html__(
             'Delivery Confirmation',
@@ -472,11 +498,12 @@ class SpeedafDeliveryConfirmation
         echo '</h2>';
 
         /*
-         * Customer already confirmed.
+         * Already confirmed.
          */
         if ($confirmed === 'yes') {
 
             echo '<div style="
+                display:block !important;
                 padding:15px;
                 background:#ecfdf3;
                 border:1px solid #a7f3d0;
@@ -492,7 +519,10 @@ class SpeedafDeliveryConfirmation
 
             echo '</strong>';
 
-            echo '<p style="margin-bottom:0;">';
+            echo '<p style="
+                display:block !important;
+                margin-bottom:0;
+            ">';
 
             echo esc_html__(
                 'Thank you. Your order has been confirmed as received.',
@@ -509,11 +539,12 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Customer already reported a problem.
+         * Already reported.
          */
         if ($problemReported === 'yes') {
 
             echo '<div style="
+                display:block !important;
                 padding:15px;
                 background:#fff7ed;
                 border:1px solid #fed7aa;
@@ -529,7 +560,10 @@ class SpeedafDeliveryConfirmation
 
             echo '</strong>';
 
-            echo '<p style="margin-bottom:0;">';
+            echo '<p style="
+                display:block !important;
+                margin-bottom:0;
+            ">';
 
             echo esc_html__(
                 'Your delivery problem has been submitted to SefrelShop and the relevant vendor.',
@@ -546,9 +580,15 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Customer has not yet responded.
+         * -----------------------------------------------------
+         * CUSTOMER MESSAGE
+         * -----------------------------------------------------
          */
-        echo '<p>';
+
+        echo '<p style="
+            display:block !important;
+            margin:0 0 20px 0;
+        ">';
 
         echo esc_html__(
             'Speedaf has marked this order as delivered. Have you received your order safely?',
@@ -558,24 +598,53 @@ class SpeedafDeliveryConfirmation
         echo '</p>';
 
         /*
-         * WooCommerce View Order URL.
+         * -----------------------------------------------------
+         * ORDER URL
+         * -----------------------------------------------------
+         *
+         * We deliberately use wc_get_endpoint_url() here.
+         * This avoids the function that may be stopping the
+         * previous rendering.
          */
-        $orderUrl = wc_get_account_view_order_url(
-            $order->get_id()
+
+        $orderUrl = wc_get_endpoint_url(
+            'view-order',
+            $order->get_id(),
+            wc_get_page_permalink('myaccount')
         );
 
         /*
          * -----------------------------------------------------
-         * CONFIRM ORDER RECEIVED FORM
+         * BUTTON CONTAINER
          * -----------------------------------------------------
          */
 
-        echo '<form method="post"
+        echo '<div
+            class="sefrelshop-delivery-actions"
+            style="
+                display:flex !important;
+                flex-wrap:wrap;
+                gap:12px;
+                width:100%;
+                margin-top:10px;
+            "
+        >';
+
+        /*
+         * -----------------------------------------------------
+         * CONFIRM ORDER FORM
+         * -----------------------------------------------------
+         */
+
+        echo '<form
+            method="post"
             action="' . esc_url($orderUrl) . '"
             style="
-                display:inline-block;
-                margin-right:10px;
-            ">';
+                display:block !important;
+                margin:0 !important;
+                padding:0 !important;
+            "
+        >';
 
         echo '<input
             type="hidden"
@@ -600,13 +669,19 @@ class SpeedafDeliveryConfirmation
         echo '<button
             type="submit"
             style="
-                background:#009839;
-                color:#ffffff;
-                border:0;
-                padding:12px 20px;
-                border-radius:5px;
-                cursor:pointer;
-                font-weight:600;
+                display:inline-block !important;
+                visibility:visible !important;
+                opacity:1 !important;
+                background:#009839 !important;
+                color:#ffffff !important;
+                border:0 !important;
+                padding:13px 22px !important;
+                min-height:45px;
+                border-radius:5px !important;
+                cursor:pointer !important;
+                font-weight:600 !important;
+                font-size:14px !important;
+                line-height:1.4 !important;
             "
         >';
 
@@ -621,41 +696,23 @@ class SpeedafDeliveryConfirmation
 
         /*
          * -----------------------------------------------------
-         * REPORT A PROBLEM
+         * REPORT PROBLEM FORM
          * -----------------------------------------------------
          */
 
-        echo '<details style="
-            display:inline-block;
-            vertical-align:top;
-        ">';
-
-        echo '<summary style="
-            display:inline-block;
-            background:#ffffff;
-            color:#b42318;
-            border:1px solid #b42318;
-            padding:11px 20px;
-            border-radius:5px;
-            cursor:pointer;
-            font-weight:600;
-        ">';
-
-        echo esc_html__(
-            'Report a Problem',
-            'sefrelshop-speedaf'
-        );
-
-        echo '</summary>';
-
-        echo '<form method="post"
+        echo '<form
+            method="post"
             action="' . esc_url($orderUrl) . '"
             style="
-                margin-top:15px;
-                padding:15px;
+                display:block !important;
+                width:100%;
+                margin:10px 0 0 0 !important;
+                padding:15px !important;
                 border:1px solid #eeeeee;
                 border-radius:6px;
-            ">';
+                box-sizing:border-box;
+            "
+        >';
 
         echo '<input
             type="hidden"
@@ -677,12 +734,18 @@ class SpeedafDeliveryConfirmation
             'sefrelshop_delivery_nonce'
         );
 
-        echo '<label for="sefrelshop_delivery_problem">';
+        echo '<label
+            for="sefrelshop_delivery_problem"
+            style="
+                display:block !important;
+                margin-bottom:8px;
+            "
+        >';
 
         echo '<strong>';
 
         echo esc_html__(
-            'Please describe the problem:',
+            'Report a delivery problem',
             'sefrelshop-speedaf'
         );
 
@@ -696,9 +759,15 @@ class SpeedafDeliveryConfirmation
             rows="5"
             required
             style="
-                width:100%;
-                margin-top:8px;
-                padding:10px;
+                display:block !important;
+                visibility:visible !important;
+                width:100% !important;
+                min-height:110px;
+                box-sizing:border-box;
+                margin:0 0 10px 0 !important;
+                padding:10px !important;
+                border:1px solid #cccccc !important;
+                border-radius:5px !important;
             "
             placeholder="' .
             esc_attr__(
@@ -711,14 +780,18 @@ class SpeedafDeliveryConfirmation
         echo '<button
             type="submit"
             style="
-                margin-top:10px;
-                background:#b42318;
-                color:#ffffff;
-                border:0;
-                padding:11px 20px;
-                border-radius:5px;
-                cursor:pointer;
-                font-weight:600;
+                display:inline-block !important;
+                visibility:visible !important;
+                opacity:1 !important;
+                background:#b42318 !important;
+                color:#ffffff !important;
+                border:0 !important;
+                padding:12px 20px !important;
+                min-height:45px;
+                border-radius:5px !important;
+                cursor:pointer !important;
+                font-weight:600 !important;
+                font-size:14px !important;
             "
         >';
 
@@ -731,13 +804,13 @@ class SpeedafDeliveryConfirmation
 
         echo '</form>';
 
-        echo '</details>';
+        echo '</div>';
 
         echo '</section>';
     }
 
     /**
-     * Confirm that the customer received the order.
+     * Confirm order received.
      */
     private function confirmOrderReceived(
         WC_Order $order
@@ -785,7 +858,7 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Complete WooCommerce order.
+         * Complete the order.
          */
         if (!$order->has_status('completed')) {
 
@@ -801,7 +874,7 @@ class SpeedafDeliveryConfirmation
         $order->save();
 
         /*
-         * Return to customer order page.
+         * Return to customer order.
          */
         $this->redirectBackToOrder(
             $order->get_id()
@@ -809,14 +882,14 @@ class SpeedafDeliveryConfirmation
     }
 
     /**
-     * Process delivery problem report.
+     * Report delivery problem.
      */
     private function reportDeliveryProblem(
         WC_Order $order
     ): void {
 
         /*
-         * Get submitted problem.
+         * Get problem description.
          */
         $problem = '';
 
@@ -830,7 +903,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Problem is required.
+         * Require problem description.
          */
         if (empty($problem)) {
 
@@ -850,7 +923,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Save problem report.
+         * Save report.
          */
         $order->update_meta_data(
             '_sefrelshop_delivery_problem_reported',
@@ -886,7 +959,7 @@ class SpeedafDeliveryConfirmation
         $order->save();
 
         /*
-         * Notify SefrelShop admin.
+         * Notify admin.
          */
         $this->notifyAdmin(
             $order,
@@ -894,7 +967,7 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Notify relevant vendor(s).
+         * Notify vendor(s).
          */
         $this->notifyVendors(
             $order,
@@ -902,7 +975,7 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Return to order page.
+         * Return to order.
          */
         $this->redirectBackToOrder(
             $order->get_id()
@@ -986,12 +1059,12 @@ class SpeedafDeliveryConfirmation
         $vendorIds = [];
 
         /*
-         * Identify vendors from order items.
+         * Inspect every order item.
          */
         foreach ($order->get_items() as $item) {
 
             /*
-             * Dokan vendor metadata.
+             * First Dokan vendor metadata.
              */
             $vendorId = $item->get_meta(
                 '_dokan_vendor_id',
@@ -999,7 +1072,7 @@ class SpeedafDeliveryConfirmation
             );
 
             /*
-             * Alternative Dokan metadata.
+             * Alternative metadata.
              */
             if (!$vendorId) {
 
@@ -1043,7 +1116,7 @@ class SpeedafDeliveryConfirmation
         );
 
         /*
-         * Notify each vendor.
+         * Send email to each vendor.
          */
         foreach ($vendorIds as $vendorId) {
 
@@ -1113,35 +1186,23 @@ class SpeedafDeliveryConfirmation
     }
 
     /**
-     * Redirect customer back to WooCommerce order page.
+     * Redirect back to the customer's order page.
      */
     private function redirectBackToOrder(
         int $orderId
     ): void {
 
         /*
-         * Preferred WooCommerce URL.
+         * Standard WooCommerce endpoint.
          */
-        $url = wc_get_account_view_order_url(
-            $orderId
+        $url = wc_get_endpoint_url(
+            'view-order',
+            $orderId,
+            wc_get_page_permalink('myaccount')
         );
 
         /*
-         * Fallback.
-         */
-        if (empty($url)) {
-
-            $url = wc_get_endpoint_url(
-                'view-order',
-                $orderId,
-                wc_get_page_permalink(
-                    'myaccount'
-                )
-            );
-        }
-
-        /*
-         * Final fallback.
+         * Fallback to My Account.
          */
         if (empty($url)) {
 
