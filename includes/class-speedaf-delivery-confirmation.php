@@ -460,7 +460,7 @@ class SpeedafDeliveryConfirmation
             <?php if (!$confirmed): ?>
 
                 <h3 style="margin-top:0;">
-                    Your order has been delivered
+                    Your order has been delivered?
                 </h3>
 
                 <p>
@@ -505,6 +505,7 @@ class SpeedafDeliveryConfirmation
                             border:0;
                             border-radius:5px;
                             cursor:pointer;
+                            color:green;
                         "
                     >
                         Confirm Order Received
