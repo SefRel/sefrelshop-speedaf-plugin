@@ -433,6 +433,16 @@ class SpeedafTrackingCallback
 
         $order->save();
 
+        /**
+         * Notify the customer email system that a new
+         * Speedaf tracking event has been processed.
+        */
+        do_action(
+         'sefrelshop_speedaf_tracking_event_processed',
+         $order,
+         $event
+    );
+
         /*
          * Add an internal WooCommerce order note.
          */

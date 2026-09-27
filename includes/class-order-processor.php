@@ -423,6 +423,17 @@ class OrderProcessor
 
 
         /**
+            * Notify SefrelShop customer-email system that the
+            * Speedaf shipment has been successfully created.
+        */
+        do_action(
+         'sefrelshop_speedaf_shipment_created',
+         $order,
+         $billCode
+        );
+
+
+        /**
          * Step 12:
          * Add WooCommerce order note.
          */

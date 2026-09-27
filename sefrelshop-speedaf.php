@@ -34,6 +34,8 @@ require_once __DIR__ . '/includes/class-speedaf-customer-tracking.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-callback.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-simulator.php';
 require_once __DIR__ . '/includes/class-speedaf-delivery-confirmation.php';
+require_once __DIR__ . '/includes/class-speedaf-customer-emails.php';
+require_once __DIR__ . '/includes/class-sefrelshop-dokan-vendor-review.php';
 require_once __DIR__ . '/includes/class-plugin.php';
 
 /*
@@ -58,7 +60,24 @@ add_action(
 |--------------------------------------------------------------------------
 */
 
-$sefrelshop_plugin = new SefrelShopPlugin();
+    $sefrelshop_plugin = new SefrelShopPlugin();
+
+
+    add_action('init', 'sefrelshop_register_customer_emails');
+
+    function sefrelshop_register_customer_emails(): void
+   {
+    $emails = new SpeedafCustomerEmails();
+    $emails->registerHooks();
+   }
+
+   add_action( 'init', 'sefrelshop_register_dokan_vendor_review' );
+
+function sefrelshop_register_dokan_vendor_review(): void {
+    $vendor_review = new SefrelShop_Dokan_Vendor_Review();
+    $vendor_review->register_hooks();
+}
+
 
 /*
 |--------------------------------------------------------------------------
@@ -70,7 +89,7 @@ $sefrelshop_plugin = new SefrelShopPlugin();
  * Runs whenever an order
  * changes to Processing.
  */
-add_action(
+  add_action(
     'woocommerce_order_status_processing',
     'sefrelshop_process_order',
     10,
