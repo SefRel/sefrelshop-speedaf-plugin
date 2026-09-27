@@ -568,6 +568,8 @@ class SpeedafDeliveryConfirmation
                             border-radius:5px;
                             cursor:pointer;
                             font-weight:600;
+                            background-color:#4CAF50;
+                            color:#fff;
                         "
                     >
                         Confirm Order Received
