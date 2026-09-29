@@ -568,8 +568,6 @@ class SpeedafDeliveryConfirmation
                             border-radius:5px;
                             cursor:pointer;
                             font-weight:600;
-                            background-color:#4CAF50;
-                            color:#fff;
                         "
                     >
                         Confirm Order Received
@@ -640,6 +638,12 @@ class SpeedafDeliveryConfirmation
                             font-weight:600;
                         "
                     >
+                        Report a Problem / Request Return
+                    </button>
+
+                </form>
+
+            <?php else: ?>
 
                 <!-- Order received -->
                 <div
@@ -1932,22 +1936,6 @@ class SpeedafDeliveryConfirmation
         $order->save();
 
         /*
-         * IMPORTANT:
-         * Notify integrations immediately after the review is created.
-         *
-         * This must run BEFORE the positive-review completion redirect,
-         * otherwise the Dokan Vendor Review integration would never run
-         * for 2–5 star reviews.
-         */
-        do_action(
-            'sefrelshop_product_review_submitted',
-            $order,
-            $purchased_product_id,
-            $rating,
-            $review_id
-        );
-
-        /*
          * Clear WooCommerce review transients.
          */
         if (class_exists('WC_Comments')) {
@@ -1955,6 +1943,14 @@ class SpeedafDeliveryConfirmation
                 $purchased_product_id
             );
         }
+
+        do_action(
+            'sefrelshop_product_review_submitted',
+            $order,
+            $purchased_product_id,
+            $rating,
+            $review_id
+        );
 
         /*
          * 1-star review.
