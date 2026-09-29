@@ -49,6 +49,27 @@ class SpeedafCustomerEmails
         );
 
         /*
+         * Also watch the Speedaf status meta directly.
+         *
+         * This makes manual/simulator status changes use the same email
+         * pipeline as real Speedaf callbacks. The existing per-status
+         * sent flags prevent duplicate emails when both paths fire.
+         */
+        add_action(
+            'updated_post_meta',
+            [$this, 'handleSpeedafStatusMetaChange'],
+            10,
+            4
+        );
+
+        add_action(
+            'added_post_meta',
+            [$this, 'handleSpeedafStatusMetaChange'],
+            10,
+            4
+        );
+
+        /*
          * Fired after customer confirms receipt.
          */
         add_action(
@@ -211,11 +232,73 @@ class SpeedafCustomerEmails
 
             $order->add_order_note(
                 sprintf(
-                    'SefrelShop Speedaf status %s customer email sent.',
-                    $status
+                    'SefrelShop Speedaf status %s customer email sent to %s.',
+                    $status,
+                    $customerEmail
+                )
+            );
+        } else {
+            $order->add_order_note(
+                sprintf(
+                    'SefrelShop Speedaf status %s customer email FAILED. Recipient: %s. Check WordPress mail/SMTP configuration.',
+                    $status,
+                    $customerEmail
                 )
             );
         }
+    }
+
+    /**
+     * Handle direct changes to the Speedaf status meta.
+     *
+     * This covers the admin/test simulator path as well as any integration
+     * that updates _speedaf_status without firing the tracking-event hook.
+     *
+     * @param int    $metaId
+     * @param int    $postId
+     * @param string $metaKey
+     * @param mixed  $metaValue
+     */
+    public function handleSpeedafStatusMetaChange(
+        $metaId,
+        $postId,
+        $metaKey,
+        $metaValue
+    ): void {
+        if ($metaKey !== '_speedaf_status') {
+            return;
+        }
+
+        $order = wc_get_order(absint($postId));
+
+        if (!$order instanceof WC_Order) {
+            return;
+        }
+
+        $status = is_scalar($metaValue)
+            ? trim((string) $metaValue)
+            : '';
+
+        if ($status === '') {
+            return;
+        }
+
+        $status = $this->normaliseSpeedafStatus($status);
+
+        if ($status === null) {
+            return;
+        }
+
+        $event = [
+            'action' => $status,
+            'msgEng' => sprintf(
+                'Speedaf tracking status updated to %s.',
+                $status
+            ),
+            'source' => 'speedaf_status_meta',
+        ];
+
+        $this->handleTrackingEvent($order, $event);
     }
 
     /**
@@ -810,6 +893,7 @@ class SpeedafCustomerEmails
                 <p><strong>Speedaf Waybill:</strong> %s</p>
                 <p>Please confirm that you have received your order. After confirmation, you can review the products you purchased.</p>
                 <p>%s</p>
+                <p>%s</p>
                 <p>If there is a problem with your delivery, you can report it from your order page.</p>',
                 esc_html($order->get_billing_first_name()),
                 esc_html($order->get_order_number()),
@@ -817,6 +901,10 @@ class SpeedafCustomerEmails
                 esc_html($billCode),
                 $this->button(
                     'Confirm Receipt & Review Order',
+                    $orderUrl
+                ),
+                $this->button(
+                    'Track Your Order',
                     $orderUrl
                 )
             )
@@ -834,14 +922,21 @@ class SpeedafCustomerEmails
             sprintf(
                 '<p>Hello %s,</p>
                 <p>Thank you for confirming receipt of order <strong>#%s</strong>.</p>
+                <p><strong>Speedaf Waybill:</strong> %s</p>
                 <p>We would love to hear about your experience. Please review the products you purchased and help other customers discover quality products from Nigerian businesses.</p>
+                <p>%s</p>
                 <p>%s</p>
                 <p>Your order has entered its inspection and review period.</p>',
                 esc_html($order->get_billing_first_name()),
                 esc_html($order->get_order_number()),
+                esc_html((string) $order->get_meta('_speedaf_bill_code', true)),
                 $this->button(
                     'Review Your Products',
                     $this->getReviewUrl($order)
+                ),
+                $this->button(
+                    'Track Your Order',
+                    $this->getOrderUrl($order)
                 )
             )
         );
@@ -858,13 +953,20 @@ class SpeedafCustomerEmails
             sprintf(
                 '<p>Hello %s,</p>
                 <p>Your order <strong>#%s</strong> has been received. How was your experience?</p>
+                <p><strong>Speedaf Waybill:</strong> %s</p>
                 <p>Your feedback helps us support reliable Nigerian businesses and helps other shoppers make better purchasing decisions.</p>
+                <p>%s</p>
                 <p>%s</p>',
                 esc_html($order->get_billing_first_name()),
                 esc_html($order->get_order_number()),
+                esc_html((string) $order->get_meta('_speedaf_bill_code', true)),
                 $this->button(
                     'Review Your Products',
                     $this->getReviewUrl($order)
+                ),
+                $this->button(
+                    'Track Your Order',
+                    $this->getOrderUrl($order)
                 )
             )
         );
@@ -893,14 +995,21 @@ class SpeedafCustomerEmails
                 '<p>Hello %s,</p>
                 <p>%s</p>
                 <p>Order <strong>#%s</strong> is ready for your product review.</p>
+                <p><strong>Speedaf Waybill:</strong> %s</p>
                 <p>Your review helps genuine Nigerian businesses build trust and helps other shoppers buy with confidence.</p>
+                <p>%s</p>
                 <p>%s</p>',
                 esc_html($order->get_billing_first_name()),
                 esc_html($message),
                 esc_html($order->get_order_number()),
+                esc_html((string) $order->get_meta('_speedaf_bill_code', true)),
                 $this->button(
                     'Review My Products',
                     $this->getReviewUrl($order)
+                ),
+                $this->button(
+                    'Track Your Order',
+                    $this->getOrderUrl($order)
                 )
             )
         );
