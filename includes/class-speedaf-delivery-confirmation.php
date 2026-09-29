@@ -568,6 +568,8 @@ class SpeedafDeliveryConfirmation
                             border-radius:5px;
                             cursor:pointer;
                             font-weight:600;
+                            background:#4caf50;
+                            color:#fff;
                         "
                     >
                         Confirm Order Received
@@ -628,6 +630,8 @@ class SpeedafDeliveryConfirmation
                     <button
                         type="submit"
                         style="
+                            background:red;
+                            color:#fff;
                             display:inline-block !important;
                             visibility:visible !important;
                             opacity:1 !important;
