@@ -1160,6 +1160,8 @@ class SpeedafDeliveryConfirmation
                     border-radius:5px;
                     cursor:pointer;
                     font-weight:600;
+                    background:#4caf50;
+                    color:#fff;
                 "
             >';
 
