@@ -642,7 +642,7 @@ class SpeedafDeliveryConfirmation
                             font-weight:600;
                         "
                     >
-                        Report a Problem / Request Return
+                        Report a Problem
                     </button>
 
                 </form>
