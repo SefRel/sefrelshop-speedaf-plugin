@@ -295,7 +295,7 @@ class SpeedafDeliveryConfirmation
         }
 
         /*
-         * Report a problem / request return.
+         * Report a problem
          */
         if ($action === 'report_delivery_problem') {
             $this->reportDeliveryProblem($order);
@@ -781,9 +781,11 @@ class SpeedafDeliveryConfirmation
                                         border-radius:5px;
                                         cursor:pointer;
                                         font-weight:600;
+                                        background:red;
+                                        color:#fff;
                                     "
                                 >
-                                    Report a Problem / Request Return
+                                    Report a Problem
                                 </button>
 
                             </form>
