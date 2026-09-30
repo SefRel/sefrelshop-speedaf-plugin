@@ -787,7 +787,7 @@ class SpeedafCustomerEmails
         $orderUrl = $this->getOrderUrl($order);
 
         return $this->emailLayout(
-            'Your order is on its way',
+            'Your order is being processed.',
             sprintf(
                 '<p>Hello %s,</p>
                 <p>Great news! Your SefrelShop order <strong>#%s</strong> is being processed and will be picked up soon for delivery.</p>
