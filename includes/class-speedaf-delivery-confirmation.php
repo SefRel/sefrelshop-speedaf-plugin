@@ -1319,7 +1319,7 @@ class SpeedafDeliveryConfirmation
         );
 
         wc_add_notice(
-            'Order received, thank you. Your order has been confirmed as received. You have 3 days to inspect your items, review your products and report any issue or request a return.',
+            'Order received, thank you. Your order has been confirmed as received. You have 3 days to inspect your items, review your products and report any issues.',
             'success'
         );
 
