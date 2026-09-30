@@ -117,6 +117,19 @@ class SpeedafCustomerEmails
         }
 
         /*
+         * Send the Speedaf shipment-created notification to the
+         * relevant Dokan vendor(s).
+         *
+         * This is independent of the customer email. Therefore,
+         * a missing customer email must not prevent the vendor
+         * notification from being sent.
+        */
+        $this->sendVendorShipmentCreatedEmails(
+          $order,
+          $billCode
+        );
+
+        /*
          * Prevent duplicate email.
          */
         if ($this->wasSent($order, '_sefrelshop_email_shipment_created')) {
@@ -181,8 +194,21 @@ class SpeedafCustomerEmails
         $metaKey = '_sefrelshop_email_speedaf_status_' . $status;
 
         /*
-         * Never send the same status notification twice.
-         */
+        * Send the Speedaf status notification to the relevant
+        * Dokan vendor(s).
+        *
+        * Vendor notifications use their own per-vendor status
+        * flags and are independent of the customer notification.
+        */
+        $this->sendVendorTrackingEmails(
+            $order,
+            $status,
+            $event
+        );
+
+        /*
+        * Never send the same customer status notification twice.
+        */
         if ($this->wasSent($order, $metaKey)) {
             return;
         }
@@ -673,6 +699,556 @@ class SpeedafCustomerEmails
             true
         );
     }
+
+    /**
+ * Send Speedaf shipment-created emails to all relevant vendors.
+ *
+ * Supports multi-vendor orders. If the same vendor has multiple
+ * products in the order, the vendor receives only one email.
+ *
+ * @param WC_Order $order
+ * @param string   $billCode
+ */
+private function sendVendorShipmentCreatedEmails(
+    WC_Order $order,
+    string $billCode
+): void {
+    $vendors = $this->getOrderVendors($order);
+
+    if (empty($vendors)) {
+        return;
+    }
+
+    foreach ($vendors as $vendor) {
+        $sellerId = $vendor['id'];
+        $email    = $vendor['email'];
+        $shopName = $vendor['shop_name'];
+
+        if (!$email) {
+            continue;
+        }
+
+        /*
+         * Per-vendor duplicate protection.
+         */
+        $metaKey = '_sefrelshop_vendor_email_shipment_created_' . $sellerId;
+
+        if ($this->wasSent($order, $metaKey)) {
+            continue;
+        }
+
+        $subject = sprintf(
+            'Speedaf shipment created — Order #%s',
+            $order->get_order_number()
+        );
+
+        $message = $this->buildVendorShipmentCreatedEmail(
+            $order,
+            $billCode,
+            $shopName
+        );
+
+        if ($this->sendEmail($email, $subject, $message)) {
+            $this->markSent($order, $metaKey);
+
+            $order->add_order_note(
+                sprintf(
+                    'SefrelShop Speedaf shipment notification email sent to vendor #%d (%s).',
+                    $sellerId,
+                    $email
+                )
+            );
+        } else {
+            $order->add_order_note(
+                sprintf(
+                    'SefrelShop Speedaf shipment notification email FAILED for vendor #%d (%s). Check WordPress mail/SMTP configuration.',
+                    $sellerId,
+                    $email
+                )
+            );
+        }
+    }
+}
+
+
+/**
+ * Send Speedaf tracking-status emails to all relevant vendors.
+ *
+ * @param WC_Order $order
+ * @param string   $status
+ * @param array    $event
+ */
+private function sendVendorTrackingEmails(
+    WC_Order $order,
+    string $status,
+    array $event
+): void {
+    $vendors = $this->getOrderVendors($order);
+
+    if (empty($vendors)) {
+        return;
+    }
+
+    $billCode = (string) $order->get_meta(
+        '_speedaf_bill_code',
+        true
+    );
+
+    foreach ($vendors as $vendor) {
+        $sellerId = $vendor['id'];
+        $email    = $vendor['email'];
+        $shopName = $vendor['shop_name'];
+
+        if (!$email) {
+            continue;
+        }
+
+        /*
+         * Each vendor gets an independent status flag.
+         *
+         * Example:
+         * _sefrelshop_vendor_email_speedaf_status_2_123
+         */
+        $metaKey = sprintf(
+            '_sefrelshop_vendor_email_speedaf_status_%s_%d',
+            $status,
+            $sellerId
+        );
+
+        if ($this->wasSent($order, $metaKey)) {
+            continue;
+        }
+
+        if (in_array($status, ['5', '16'], true)) {
+            $subject = sprintf(
+                'Speedaf marked order #%s as delivered',
+                $order->get_order_number()
+            );
+
+            $message = $this->buildVendorDeliveredEmail(
+                $order,
+                $billCode,
+                $event,
+                $shopName
+            );
+        } else {
+            $subject = $this->getVendorStatusSubject(
+                $order,
+                $status
+            );
+
+            $message = $this->buildVendorTrackingEmail(
+                $order,
+                $status,
+                $billCode,
+                $event,
+                $shopName
+            );
+        }
+
+        if ($this->sendEmail($email, $subject, $message)) {
+            $this->markSent($order, $metaKey);
+
+            $order->add_order_note(
+                sprintf(
+                    'SefrelShop Speedaf status %s vendor email sent to vendor #%d (%s).',
+                    $status,
+                    $sellerId,
+                    $email
+                )
+            );
+        } else {
+            $order->add_order_note(
+                sprintf(
+                    'SefrelShop Speedaf status %s vendor email FAILED for vendor #%d (%s). Check WordPress mail/SMTP configuration.',
+                    $status,
+                    $sellerId,
+                    $email
+                )
+            );
+        }
+    }
+}
+
+
+/**
+ * Get all unique Dokan vendors represented in an order.
+ *
+ * @param WC_Order $order
+ * @return array
+ */
+private function getOrderVendors(WC_Order $order): array
+{
+    $vendors = [];
+
+    foreach ($order->get_items('line_item') as $item) {
+        $productId = $item->get_product_id();
+
+        if (!$productId) {
+            continue;
+        }
+
+        /*
+         * Dokan's native vendor lookup.
+         */
+        if (!function_exists('dokan_get_vendor_by_product')) {
+            continue;
+        }
+
+        $vendor = dokan_get_vendor_by_product($productId);
+
+        if (!$vendor || !is_object($vendor)) {
+            continue;
+        }
+
+        if (!method_exists($vendor, 'get_id')) {
+            continue;
+        }
+
+        $sellerId = absint($vendor->get_id());
+
+        if (!$sellerId) {
+            continue;
+        }
+
+        /*
+         * Avoid sending multiple emails to the same vendor
+         * when the order contains multiple products from them.
+         */
+        if (isset($vendors[$sellerId])) {
+            continue;
+        }
+
+        $user = get_userdata($sellerId);
+
+        if (!$user || !is_email($user->user_email)) {
+            continue;
+        }
+
+        /*
+         * Get shop name from Dokan when available.
+         */
+        $shopName = '';
+
+        if (method_exists($vendor, 'get_shop_name')) {
+            $shopName = (string) $vendor->get_shop_name();
+        }
+
+        if ($shopName === '') {
+            $shopName = (string) $user->display_name;
+        }
+
+        if ($shopName === '') {
+            $shopName = 'Vendor';
+        }
+
+        $vendors[$sellerId] = [
+            'id'        => $sellerId,
+            'email'     => sanitize_email($user->user_email),
+            'shop_name' => sanitize_text_field($shopName),
+        ];
+    }
+
+    return array_values($vendors);
+}
+
+
+/**
+ * Get Dokan vendor order dashboard URL.
+ *
+ * @param WC_Order $order
+ * @return string
+ */
+private function getVendorOrderUrl(WC_Order $order): string
+{
+    if (function_exists('dokan_get_navigation_url')) {
+        $baseUrl = dokan_get_navigation_url('orders');
+
+        if ($baseUrl) {
+            return add_query_arg(
+                'order_id',
+                $order->get_id(),
+                $baseUrl
+            );
+        }
+    }
+
+    /*
+     * Fallback.
+     */
+    return $order->get_view_order_url()
+        ?: home_url('/');
+}
+
+
+/**
+ * Get vendor tracking-status subject.
+ *
+ * @param WC_Order $order
+ * @param string   $status
+ * @return string
+ */
+private function getVendorStatusSubject(
+    WC_Order $order,
+    string $status
+): string {
+    $subjects = [
+        '1'  => 'Speedaf picked up your SefrelShop order',
+        '2'  => 'Your SefrelShop order is in transit',
+        '3'  => 'Your SefrelShop order has arrived at pickup point',
+        '4'  => 'Your SefrelShop order is out for delivery',
+        '5'  => 'Speedaf delivered your SefrelShop order',
+        '16' => 'Speedaf delivered your SefrelShop order',
+    ];
+
+    return sprintf(
+        '%s — Order #%s',
+        $subjects[$status]
+            ?? 'Speedaf delivery update',
+        $order->get_order_number()
+    );
+}
+
+
+/**
+ * Build vendor shipment-created email.
+ *
+ * @param WC_Order $order
+ * @param string   $billCode
+ * @param string   $shopName
+ * @return string
+ */
+private function buildVendorShipmentCreatedEmail(
+    WC_Order $order,
+    string $billCode,
+    string $shopName
+): string {
+    $customerName = trim(
+        $order->get_billing_first_name()
+        . ' '
+        . $order->get_billing_last_name()
+    );
+
+    if ($customerName === '') {
+        $customerName = 'Customer';
+    }
+
+    return $this->emailLayout(
+        'Speedaf shipment created',
+        sprintf(
+            '<p>Hello %s,</p>
+
+            <p>A Speedaf shipment has been created for an order
+            associated with your SefrelShop store
+            <strong>%s</strong>.</p>
+
+            <p>
+                <strong>Order:</strong> #%s<br>
+                <strong>Customer:</strong> %s<br>
+                <strong>Speedaf Waybill:</strong> %s
+            </p>
+
+            <p>
+                The shipment has been successfully created and
+                is now being handled by Speedaf.
+            </p>
+
+            <p>%s</p>',
+            esc_html($shopName),
+            esc_html($shopName),
+            esc_html($order->get_order_number()),
+            esc_html($customerName),
+            esc_html($billCode),
+            $this->button(
+                'View Order in Vendor Dashboard',
+                $this->getVendorOrderUrl($order)
+            )
+        )
+    );
+}
+
+
+/**
+ * Build vendor tracking-status email.
+ *
+ * @param WC_Order $order
+ * @param string   $status
+ * @param string   $billCode
+ * @param array    $event
+ * @param string   $shopName
+ * @return string
+ */
+private function buildVendorTrackingEmail(
+    WC_Order $order,
+    string $status,
+    string $billCode,
+    array $event,
+    string $shopName
+): string {
+    $messages = [
+        '1' => [
+            'heading' => 'Speedaf has picked up the parcel',
+            'message' => 'The parcel associated with this order has been picked up by Speedaf.',
+        ],
+        '2' => [
+            'heading' => 'Your parcel is in transit',
+            'message' => 'The parcel associated with this order is currently in transit.',
+        ],
+        '3' => [
+            'heading' => 'Your parcel has arrived',
+            'message' => 'The parcel has arrived at a Speedaf pickup point.',
+        ],
+        '4' => [
+            'heading' => 'Your parcel is out for delivery',
+            'message' => 'The parcel is currently out for delivery.',
+        ],
+    ];
+
+    $heading = $messages[$status]['heading']
+        ?? 'Speedaf delivery update';
+
+    $message = $messages[$status]['message']
+        ?? 'The Speedaf delivery status for this order has been updated.';
+
+    $eventMessage = $this->getEventMessage($event);
+
+    $latestUpdate = '';
+
+    if ($eventMessage !== '') {
+        $latestUpdate = sprintf(
+            '<p>
+                <strong>Latest Speedaf update:</strong><br>
+                %s
+            </p>',
+            esc_html($eventMessage)
+        );
+    }
+
+    $customerName = trim(
+        $order->get_billing_first_name()
+        . ' '
+        . $order->get_billing_last_name()
+    );
+
+    if ($customerName === '') {
+        $customerName = 'Customer';
+    }
+
+    return $this->emailLayout(
+        $heading,
+        sprintf(
+            '<p>Hello %s,</p>
+
+            <p>
+                There is a Speedaf delivery update for an order
+                associated with your store
+                <strong>%s</strong>.
+            </p>
+
+            <p>%s</p>
+
+            %s
+
+            <p>
+                <strong>Order:</strong> #%s<br>
+                <strong>Customer:</strong> %s<br>
+                <strong>Speedaf Waybill:</strong> %s
+            </p>
+
+            <p>%s</p>',
+            esc_html($shopName),
+            esc_html($shopName),
+            esc_html($message),
+            $latestUpdate,
+            esc_html($order->get_order_number()),
+            esc_html($customerName),
+            esc_html($billCode ?: 'Not available'),
+            $this->button(
+                'View Order in Vendor Dashboard',
+                $this->getVendorOrderUrl($order)
+            )
+        )
+    );
+}
+
+
+/**
+ * Build vendor delivered email.
+ *
+ * @param WC_Order $order
+ * @param string   $billCode
+ * @param array    $event
+ * @param string   $shopName
+ * @return string
+ */
+private function buildVendorDeliveredEmail(
+    WC_Order $order,
+    string $billCode,
+    array $event,
+    string $shopName
+): string {
+    $eventMessage = $this->getEventMessage($event);
+
+    $latestUpdate = '';
+
+    if ($eventMessage !== '') {
+        $latestUpdate = sprintf(
+            '<p>
+                <strong>Delivery update:</strong><br>
+                %s
+            </p>',
+            esc_html($eventMessage)
+        );
+    }
+
+    $customerName = trim(
+        $order->get_billing_first_name()
+        . ' '
+        . $order->get_billing_last_name()
+    );
+
+    if ($customerName === '') {
+        $customerName = 'Customer';
+    }
+
+    return $this->emailLayout(
+        'Speedaf has marked the order as delivered',
+        sprintf(
+            '<p>Hello %s,</p>
+
+            <p>
+                Speedaf has marked order
+                <strong>#%s</strong>
+                as delivered.
+            </p>
+
+            %s
+
+            <p>
+                <strong>Store:</strong> %s<br>
+                <strong>Customer:</strong> %s<br>
+                <strong>Speedaf Waybill:</strong> %s
+            </p>
+
+            <p>
+                Please review the order from your vendor dashboard
+                if any further action is required.
+            </p>
+
+            <p>%s</p>',
+            esc_html($shopName),
+            esc_html($order->get_order_number()),
+            $latestUpdate,
+            esc_html($shopName),
+            esc_html($customerName),
+            esc_html($billCode ?: 'Not available'),
+            $this->button(
+                'View Order in Vendor Dashboard',
+                $this->getVendorOrderUrl($order)
+            )
+        )
+    );
+}
 
     /**
      * Normalise Speedaf status.
