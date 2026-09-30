@@ -790,7 +790,7 @@ class SpeedafCustomerEmails
             'Your order is on its way',
             sprintf(
                 '<p>Hello %s,</p>
-                <p>Great news! Your SefrelShop order <strong>#%s</strong> has been handed over for delivery.</p>
+                <p>Great news! Your SefrelShop order <strong>#%s</strong> is being processed and will be picked up soon for delivery.</p>
                 <p><strong>Speedaf Waybill:</strong> %s</p>
                 <p>You can follow your delivery progress from your order page.</p>
                 <p>%s</p>',
