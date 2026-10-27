@@ -205,6 +205,7 @@ class SpeedafZoneResolver
         $state = $this->normalize($state);
 
         $aliases = [
+            'fc' => 'fct',
             'federal capital territory' => 'fct',
             'abuja federal capital territory' => 'fct',
             'f.c.t.' => 'fct',
