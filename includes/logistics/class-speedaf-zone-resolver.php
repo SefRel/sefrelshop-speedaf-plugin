@@ -129,7 +129,7 @@ class SpeedafZoneResolver
     /**
      * Resolve a known tariff reference city.
      *
-     * Unknown cities return null because a state was not supplied.
+     * Unknown cities return null.
      */
     public function resolveCity(string $city): ?int
     {
@@ -165,7 +165,7 @@ class SpeedafZoneResolver
 
         $knownCityState = self::CITY_STATES[$city] ?? null;
 
-        // Do not accept a known reference city paired with the wrong state.
+        // Reject a known reference city paired with the wrong state.
         if ($knownCityState !== null) {
             if ($state !== $this->normalizeState($knownCityState)) {
                 return null;
@@ -178,6 +178,9 @@ class SpeedafZoneResolver
         return self::STATE_ZONES[$state] ?? null;
     }
 
+    /**
+     * Resolve the tariff zone for a shipment.
+     */
     public function resolveShipmentZone(
         int $pickupZone,
         int $deliveryZone
@@ -192,6 +195,9 @@ class SpeedafZoneResolver
         return max($pickupZone, $deliveryZone);
     }
 
+    /**
+     * Normalize city and state strings.
+     */
     private function normalize(string $value): string
     {
         $value = strtolower(trim($value));
@@ -200,6 +206,9 @@ class SpeedafZoneResolver
         return preg_replace('/\s+/', ' ', $value) ?? '';
     }
 
+    /**
+     * Normalize state names and supported aliases.
+     */
     private function normalizeState(string $state): string
     {
         $state = $this->normalize($state);
@@ -208,6 +217,7 @@ class SpeedafZoneResolver
             'fc' => 'fct',
             'federal capital territory' => 'fct',
             'abuja federal capital territory' => 'fct',
+            'f c t' => 'fct',
             'f.c.t.' => 'fct',
         ];
 
