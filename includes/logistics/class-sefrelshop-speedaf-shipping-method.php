@@ -66,7 +66,7 @@ class SefrelShop_Speedaf_Shipping_Method extends WC_Shipping_Method
 
 
 public function calculate_shipping($package = [])
-{
+{ error_log('[SefrelShop Speedaf] calculate_shipping() reached');
    $log = static function ($message) {
     if (function_exists('wc_get_logger')) {
         wc_get_logger()->debug(
