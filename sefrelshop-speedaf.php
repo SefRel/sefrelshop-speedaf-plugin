@@ -27,6 +27,7 @@ require_once __DIR__ . '/includes/logistics/class-shipping-provider.php';
 require_once __DIR__ . '/includes/logistics/class-speedaf-provider.php';
 require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
+require_once __DIR__ . '/includes/class-speedaf-tariff-manager.php';
 
 require_once __DIR__ . '/includes/class-order-processor.php';
 require_once __DIR__ . '/includes/class-speedaf-tracking-sync.php';
@@ -61,6 +62,8 @@ add_action(
 */
 
     $sefrelshop_plugin = new SefrelShopPlugin();
+    $sefrelshop_tariff_manager = new SpeedafTariffManager();
+    $sefrelshop_tariff_manager->registerHooks();
 
 
     add_action('init', 'sefrelshop_register_customer_emails');

@@ -4,76 +4,48 @@
 /**
  * Speedaf local tariff calculator.
  *
- * Uses VAT-inclusive rates from the supplied Speedaf tariff,
- * effective 1 November 2024, pending confirmation of validity.
+ * Uses the SefrelShop agreed tariff, effective 1 February 2025.
+ * Tariff prices exclude VAT; 7.5% VAT is added during calculation.
  *
  * This class calculates prices only. It does not create shipments,
  * call carrier APIs, or select a logistics provider.
  */
 class RateCalculator
 {
-    /**
-     * VAT-inclusive rates for shipments up to and including 20 kg.
-     * Keys are chargeable weights in kg.
-     * Values are ordered Zone 1, Zone 2, Zone 3, Zone 4.
-     */
-    private const PARCEL_RATES = [
-        0.5  => [2419, 3522, 4718, 5766],
-        1.0  => [2903, 3774, 4979, 6027],
-        1.5  => [3145, 4277, 5241, 6289],
-        2.0  => [3387, 4528, 5766, 6552],
-        2.5  => [3629, 4780, 6027, 7075],
-        3.0  => [4112, 5031, 6289, 7337],
-        3.5  => [4354, 5535, 6552, 7600],
-        4.0  => [4596, 5786, 7075, 7862],
-        4.5  => [4838, 6038, 7337, 8385],
-        5.0  => [5322, 6289, 7600, 8648],
-        5.5  => [5805, 7044, 9056, 10188],
-        6.0  => [6047, 7295, 9339, 10471],
-        6.5  => [6289, 7547, 9623, 10755],
-        7.0  => [6773, 8050, 10188, 11038],
-        7.5  => [7015, 8302, 10471, 11603],
-        8.0  => [7257, 8553, 10755, 11887],
-        8.5  => [7740, 9056, 11038, 12169],
-        9.0  => [7982, 9308, 11603, 12735],
-        9.5  => [8224, 9559, 11887, 13019],
-        10.0 => [8708, 9811, 12169, 13301],
-        10.5 => [9192, 10566, 13019, 14151],
-        11.0 => [9434, 10817, 13301, 14433],
-        11.5 => [9917, 11069, 13584, 14716],
-        12.0 => [10159, 11572, 14151, 15283],
-        12.5 => [10401, 11823, 14433, 15565],
-        13.0 => [10643, 12075, 14716, 16131],
-        13.5 => [11127, 12578, 15283, 16131],
-        14.0 => [11369, 12830, 15565, 16697],
-        14.5 => [11610, 13081, 15848, 17263],
-        15.0 => [12094, 13584, 16131, 17547],
-        15.5 => [12336, 13836, 16697, 17829],
-        16.0 => [12578, 14087, 17263, 18112],
-        16.5 => [13062, 14339, 17547, 18679],
-        17.0 => [13304, 14842, 17829, 18961],
-        17.5 => [13545, 15345, 18112, 19244],
-        18.0 => [13787, 15597, 18679, 19811],
-        18.5 => [14271, 15848, 18961, 20093],
-        19.0 => [14513, 16100, 19244, 20376],
-        19.5 => [14755, 16603, 19527, 20943],
-        20.0 => [15239, 16854, 20093, 21508],
-    ];
+    private const VAT_RATE = 0.075;
+    private const MAX_WAYBILL_WEIGHT_KG = 10.0;
 
     /**
-     * VAT-inclusive bulk rates per kg.
+     * Default agreed tariff prices, excluding VAT.
+     * Rows are weight bands; columns are Zones 1, 2, 3, 4.
      *
-     * Keys are inclusive upper limits of each tariff band.
-     * Values are ordered Zone 1, Zone 2, Zone 3, Zone 4.
+     * These defaults will later be editable through WordPress Admin.
      */
-    private const BULK_RATES_PER_KG = [
-        50   => [655, 736, 786, 917],
-        100  => [525, 655, 736, 786],
-        5000 => [505, 585, 655, 736],
-    ];
+   private const DEFAULT_TARIFF = [
+    1  => [3016, 4950, 6624, 8100],
+    2  => [3616, 5301, 6984, 8460],
+    3  => [3920, 6003, 7362, 8838],
+    4  => [4224, 6354, 8100, 9198],
+    5  => [4528, 6714, 8460, 9936],
+    6  => [5128, 7065, 8838, 10296],
+    7  => [5432, 7767, 9198, 10674],
+    8  => [5744, 8118, 9936, 11034],
+    9  => [6040, 8487, 10296, 11772],
+    10 => [6648, 8838, 10674, 12141],
+    11 => [7248, 9891, 12717, 14310],
+    12 => [7552, 10242, 13113, 14706],
+    13 => [7856, 10602, 13518, 15102],
+    14 => [8456, 11304, 14310, 15507],
+    15 => [8760, 11655, 14706, 16290],
+    16 => [9056, 12006, 15102, 16686],
+    17 => [9664, 12717, 15507, 17082],
+    18 => [9960, 13068, 16290, 17874],
+    19 => [10264, 13419, 16686, 18279],
+    20 => [10872, 13770, 17082, 18675],
+];
 
     /**
-     * Preserve the existing comparison method for compatibility.
+     * Preserve compatibility with existing callers.
      */
     public function compare(array $rates): array
     {
@@ -81,7 +53,66 @@ class RateCalculator
     }
 
     /**
-     * Calculate a Speedaf tariff quote.
+     * Return the active tariff.
+     *
+     * The WordPress option will be populated by the tariff manager.
+     * If it is absent, use the agreed tariff defaults.
+     */
+    private function getTariff(): array
+    {
+        if (function_exists('get_option')) {
+            $saved = get_option('sefrelshop_speedaf_tariff', null);
+
+            if (is_array($saved) && $this->isValidTariff($saved)) {
+                return $saved;
+            }
+        }
+
+        return self::DEFAULT_TARIFF;
+    }
+
+/**
+ * Validate tariff rows before using saved settings.
+ */
+private function isValidTariff(array $tariff): bool
+{
+    if (count($tariff) !== count(self::DEFAULT_TARIFF)) {
+        return false;
+    }
+
+    foreach (self::DEFAULT_TARIFF as $weight => $defaults) {
+        if (!isset($tariff[$weight]) || !is_array($tariff[$weight])) {
+            return false;
+        }
+
+        if (count($tariff[$weight]) !== 4) {
+            return false;
+        }
+
+        for ($zone = 0; $zone < 4; $zone++) {
+            if (!array_key_exists($zone, $tariff[$weight])) {
+                return false;
+            }
+
+            $price = $tariff[$weight][$zone];
+
+            // Accept only positive whole-number prices.
+            if (
+                !(is_int($price) || (is_string($price) && ctype_digit($price))) ||
+                (int) $price < 1 ||
+                (int) $price > 100000000
+            ) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+
+    /**
+     * Calculate a Speedaf quote.
      *
      * Required input:
      * [
@@ -91,7 +122,7 @@ class RateCalculator
      * ]
      *
      * Chargeable weight must already account for actual versus
-     * dimensional weight according to the applicable carrier rules.
+     * dimensional weight under the applicable carrier rules.
      *
      * @throws InvalidArgumentException For invalid or unsupported input.
      */
@@ -145,77 +176,46 @@ class RateCalculator
 
         $weight = (float) $weight;
 
-        // SefrelShop's agreed zone rule: use the higher zone number.
+        if ($weight > self::MAX_WAYBILL_WEIGHT_KG) {
+            throw new InvalidArgumentException(
+                'Speedaf waybill weight exceeds 10 kg. Split the shipment into eligible waybills.'
+            );
+        }
+
+        // Use the higher-numbered pickup/delivery zone.
         $zone = max($pickupZone, $deliveryZone);
 
-        if ($weight <= 20.0) {
-            // Round upward to the next 0.5 kg band.
-            // Integer arithmetic avoids common floating-point boundary errors.
-            $halfKgUnits = (int) ceil(($weight * 2) - 1e-9);
-            $billableWeight = $halfKgUnits / 2;
+        // Round upward to the next 0.5 kg tariff band.
+       $halfKgUnits = (int) ceil(($weight * 2) - 1e-9);
+$billableWeight = $halfKgUnits / 2;
 
-            if (!isset(self::PARCEL_RATES[$billableWeight])) {
-                throw new InvalidArgumentException(
-                    'No parcel tariff exists for the calculated weight band.'
-                );
-            }
+$tariff = $this->getTariff();
 
-            $amount = self::PARCEL_RATES[$billableWeight][$zone - 1];
+if (!isset($tariff[$halfKgUnits][$zone - 1])) {
+    throw new InvalidArgumentException(
+        'No tariff exists for the calculated weight band and zone.'
+    );
+}
 
-            return [
-                'success' => true,
-                'provider' => 'speedaf',
-                'currency' => 'NGN',
-                'amount' => $amount,
-                'vat_inclusive' => true,
-                'zone' => $zone,
-                'pickup_zone' => $pickupZone,
-                'delivery_zone' => $deliveryZone,
-                'chargeable_weight_kg' => $weight,
-                'billable_weight_kg' => $billableWeight,
-                'rate_type' => 'parcel',
-            ];
-        }
-
-        // Bulk bands use their documented per-kg tariff rates.
-        // This implementation does not round bulk weight to 0.5 kg.
-        if ($weight > 5000) {
-            throw new InvalidArgumentException(
-                'Shipment weight exceeds the tariff maximum of 5000 kg.'
-            );
-        }
-
-        $ratePerKg = null;
-        $weightBand = null;
-
-        foreach (self::BULK_RATES_PER_KG as $upperLimit => $rates) {
-            if ($weight <= $upperLimit) {
-                $ratePerKg = $rates[$zone - 1];
-                $weightBand = $upperLimit;
-                break;
-            }
-        }
-
-        if ($ratePerKg === null) {
-            throw new InvalidArgumentException(
-                'No bulk tariff exists for this shipment weight.'
-            );
-        }
+$baseAmount = (int) $tariff[$halfKgUnits][$zone - 1];
+        $vatAmount = (int) round($baseAmount * self::VAT_RATE);
+        $finalAmount = $baseAmount + $vatAmount;
 
         return [
             'success' => true,
             'provider' => 'speedaf',
             'currency' => 'NGN',
-            'amount' => (int) round($weight * $ratePerKg),
+            'amount' => $finalAmount,
+            'base_amount' => $baseAmount,
+            'vat_rate' => self::VAT_RATE,
+            'vat_amount' => $vatAmount,
             'vat_inclusive' => true,
             'zone' => $zone,
             'pickup_zone' => $pickupZone,
             'delivery_zone' => $deliveryZone,
             'chargeable_weight_kg' => $weight,
-            'billable_weight_kg' => $weight,
-            'rate_type' => 'bulk',
-            'bulk_band_max_kg' => $weightBand,
-            'rate_per_kg' => $ratePerKg,
+            'billable_weight_kg' => $billableWeight,
+            'rate_type' => 'parcel',
         ];
     }
 }
