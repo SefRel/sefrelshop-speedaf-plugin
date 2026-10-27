@@ -27,6 +27,13 @@ require_once __DIR__ . '/includes/logistics/class-shipping-provider.php';
 require_once __DIR__ . '/includes/logistics/class-speedaf-provider.php';
 require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
+require_once __DIR__ . '/includes/logistics/class-shipment-splitter.php';
+require_once __DIR__ . '/includes/logistics/class-shipment-pricing.php';
+require_once __DIR__ . '/includes/logistics/class-speedaf-zone-resolver.php';
+require_once __DIR__ . '/includes/logistics/class-rate-calculator.php';
+require_once __DIR__ . '/includes/logistics/class-pickup-location-resolver.php';
+require_once __DIR__ . '/includes/logistics/class-sefrelshop-speedaf-shipping-method.php';
+require_once __DIR__ . '/includes/logistics/class-shipment-item-builder.php';
 require_once __DIR__ . '/includes/class-speedaf-tariff-manager.php';
 
 require_once __DIR__ . '/includes/class-order-processor.php';
@@ -38,6 +45,46 @@ require_once __DIR__ . '/includes/class-speedaf-delivery-confirmation.php';
 require_once __DIR__ . '/includes/class-speedaf-customer-emails.php';
 require_once __DIR__ . '/includes/class-sefrelshop-dokan-vendor-review.php';
 require_once __DIR__ . '/includes/class-plugin.php';
+
+
+
+
+add_action(
+    'woocommerce_shipping_init',
+    function () {
+        require_once __DIR__ . '/includes/logistics/class-rate-calculator.php';
+        require_once __DIR__ . '/includes/logistics/class-speedaf-zone-resolver.php';
+        require_once __DIR__ . '/includes/logistics/class-pickup-location-resolver.php';
+        require_once __DIR__ . '/includes/logistics/class-shipment-splitter.php';
+        require_once __DIR__ . '/includes/logistics/class-shipment-pricing.php';
+        require_once __DIR__ . '/includes/logistics/class-shipment-item-builder.php';
+        require_once __DIR__ . '/includes/logistics/class-sefrelshop-speedaf-shipping-method.php';
+    }
+);
+
+
+add_filter(
+    'woocommerce_shipping_methods',
+    function ($methods) {
+        $methods['sefrelshop_speedaf'] =
+            'SefrelShop_Speedaf_Shipping_Method';
+
+        return $methods;
+    }
+);
+
+
+
+/**
+ * Speedaf shipment grouping is handled internally by the
+ * SefrelShop shipment splitter.
+ *
+ * Do not split WooCommerce shipping packages by vendor here.
+ * Products from different vendors may share a pickup location
+ * and be consolidated into the same Speedaf waybill.
+ */
+
+
 
 /*
 |--------------------------------------------------------------------------

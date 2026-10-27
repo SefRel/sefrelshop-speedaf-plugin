@@ -1,0 +1,24 @@
+
+# Temporary local test scripts
+test-pricing-temp.php
+test-splitter-temp.php
+test-*-temp.php
+
+# Local development and editor files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependency and test artifacts
+vendor/
+.phpunit.cache/
+
+test-zone-resolver-temp.php
+test-zone-smoke-temp.php
+test-zone-smoke-temp.txt
+zone-check.php
