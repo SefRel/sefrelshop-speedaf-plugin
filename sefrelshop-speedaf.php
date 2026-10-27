@@ -1,3 +1,4 @@
+
 <?php
 
 /**
@@ -27,13 +28,6 @@ require_once __DIR__ . '/includes/logistics/class-shipping-provider.php';
 require_once __DIR__ . '/includes/logistics/class-speedaf-provider.php';
 require_once __DIR__ . '/includes/logistics/class-logistics-manager.php';
 require_once __DIR__ . '/includes/logistics/class-shipping-router.php';
-require_once __DIR__ . '/includes/logistics/class-shipment-splitter.php';
-require_once __DIR__ . '/includes/logistics/class-shipment-pricing.php';
-require_once __DIR__ . '/includes/logistics/class-speedaf-zone-resolver.php';
-require_once __DIR__ . '/includes/logistics/class-rate-calculator.php';
-require_once __DIR__ . '/includes/logistics/class-pickup-location-resolver.php';
-require_once __DIR__ . '/includes/logistics/class-sefrelshop-speedaf-shipping-method.php';
-require_once __DIR__ . '/includes/logistics/class-shipment-item-builder.php';
 require_once __DIR__ . '/includes/class-speedaf-tariff-manager.php';
 
 require_once __DIR__ . '/includes/class-order-processor.php';
@@ -46,8 +40,16 @@ require_once __DIR__ . '/includes/class-speedaf-customer-emails.php';
 require_once __DIR__ . '/includes/class-sefrelshop-dokan-vendor-review.php';
 require_once __DIR__ . '/includes/class-plugin.php';
 
-
-
+/*
+|--------------------------------------------------------------------------
+| Register Speedaf WooCommerce Shipping Method
+|--------------------------------------------------------------------------
+|
+| Load the shipping classes only after WooCommerce initializes shipping.
+| This prevents the shipping method from extending WC_Shipping_Method
+| before WooCommerce has loaded that parent class.
+|
+*/
 
 add_action(
     'woocommerce_shipping_init',
@@ -62,7 +64,6 @@ add_action(
     }
 );
 
-
 add_filter(
     'woocommerce_shipping_methods',
     function ($methods) {
@@ -73,18 +74,15 @@ add_filter(
     }
 );
 
-
-
-/**
- * Speedaf shipment grouping is handled internally by the
- * SefrelShop shipment splitter.
- *
- * Do not split WooCommerce shipping packages by vendor here.
- * Products from different vendors may share a pickup location
- * and be consolidated into the same Speedaf waybill.
- */
-
-
+/*
+|--------------------------------------------------------------------------
+| Speedaf Shipment Grouping
+|--------------------------------------------------------------------------
+|
+| Grouping is handled internally by the shipment splitter.
+| Products from different vendors may share a pickup location.
+|
+*/
 
 /*
 |--------------------------------------------------------------------------
@@ -95,9 +93,7 @@ add_filter(
 add_action(
     'rest_api_init',
     function () {
-
         $callback = new SpeedafTrackingCallback();
-
         $callback->registerRoutes();
     }
 );
@@ -108,26 +104,38 @@ add_action(
 |--------------------------------------------------------------------------
 */
 
-    $sefrelshop_plugin = new SefrelShopPlugin();
-    $sefrelshop_tariff_manager = new SpeedafTariffManager();
-    $sefrelshop_tariff_manager->registerHooks();
+$sefrelshop_plugin = new SefrelShopPlugin();
 
+$sefrelshop_tariff_manager = new SpeedafTariffManager();
+$sefrelshop_tariff_manager->registerHooks();
 
-    add_action('init', 'sefrelshop_register_customer_emails');
+/*
+|--------------------------------------------------------------------------
+| Customer Emails
+|--------------------------------------------------------------------------
+*/
 
-    function sefrelshop_register_customer_emails(): void
-   {
+add_action('init', 'sefrelshop_register_customer_emails');
+
+function sefrelshop_register_customer_emails(): void
+{
     $emails = new SpeedafCustomerEmails();
     $emails->registerHooks();
-   }
+}
 
-   add_action( 'init', 'sefrelshop_register_dokan_vendor_review' );
+/*
+|--------------------------------------------------------------------------
+| Dokan Vendor Review
+|--------------------------------------------------------------------------
+*/
 
-function sefrelshop_register_dokan_vendor_review(): void {
+add_action('init', 'sefrelshop_register_dokan_vendor_review');
+
+function sefrelshop_register_dokan_vendor_review(): void
+{
     $vendor_review = new SefrelShop_Dokan_Vendor_Review();
     $vendor_review->register_hooks();
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -135,11 +143,7 @@ function sefrelshop_register_dokan_vendor_review(): void {
 |--------------------------------------------------------------------------
 */
 
-/**
- * Runs whenever an order
- * changes to Processing.
- */
-  add_action(
+add_action(
     'woocommerce_order_status_processing',
     'sefrelshop_process_order',
     10,
@@ -147,25 +151,14 @@ function sefrelshop_register_dokan_vendor_review(): void {
 );
 
 if (!function_exists('sefrelshop_process_order')) {
-
     function sefrelshop_process_order($order_id)
     {
-        update_option(
-            'step_1',
-            'Hook Fired'
-        );
+        update_option('step_1', 'Hook Fired');
 
-        $order = wc_get_order(
-            $order_id
-        );
+        $order = wc_get_order($order_id);
 
         if (!$order) {
-
-            update_option(
-                'step_2',
-                'Order NOT loaded'
-            );
-
+            update_option('step_2', 'Order NOT loaded');
             return;
         }
 
@@ -176,19 +169,11 @@ if (!function_exists('sefrelshop_process_order')) {
 
         $plugin = new SefrelShopPlugin();
 
-        update_option(
-            'step_3',
-            'Plugin Created'
-        );
+        update_option('step_3', 'Plugin Created');
 
-        $result = $plugin->processOrder(
-            $order
-        );
+        $result = $plugin->processOrder($order);
 
-        update_option(
-            'step_4',
-            wp_json_encode($result)
-        );
+        update_option('step_4', wp_json_encode($result));
     }
 }
 
@@ -204,12 +189,9 @@ add_filter(
     20
 );
 
-function sefrelshop_make_billing_phone_required(
-    array $fields
-): array {
-
+function sefrelshop_make_billing_phone_required(array $fields): array
+{
     if (isset($fields['billing_phone'])) {
-
         $fields['billing_phone']['required'] = true;
     }
 
@@ -222,15 +204,11 @@ function sefrelshop_make_billing_phone_required(
 |--------------------------------------------------------------------------
 */
 
-add_action(
-    'init',
-    'sefrelshop_register_customer_tracking'
-);
+add_action('init', 'sefrelshop_register_customer_tracking');
 
 function sefrelshop_register_customer_tracking(): void
 {
     $tracking = new SpeedafCustomerTracking();
-
     $tracking->registerHooks();
 }
 
@@ -240,15 +218,11 @@ function sefrelshop_register_customer_tracking(): void
 |--------------------------------------------------------------------------
 |
 | Usage:
-|
 | /wp-admin/?sefrelshop_test_tracking=27538
 |
 */
 
-add_action(
-    'admin_init',
-    'sefrelshop_test_tracking'
-);
+add_action('admin_init', 'sefrelshop_test_tracking');
 
 function sefrelshop_test_tracking(): void
 {
@@ -260,52 +234,40 @@ function sefrelshop_test_tracking(): void
         return;
     }
 
-    $order_id = absint(
-        $_GET['sefrelshop_test_tracking']
-    );
+    $order_id = absint($_GET['sefrelshop_test_tracking']);
 
     if (!$order_id) {
-
-        wp_die(
-            'Invalid WooCommerce order ID.'
-        );
+        wp_die('Invalid WooCommerce order ID.');
     }
 
-    $order = wc_get_order(
-        $order_id
-    );
+    $order = wc_get_order($order_id);
 
     if (!$order) {
-
-        wp_die(
-            'WooCommerce order not found.'
-        );
+        wp_die('WooCommerce order not found.');
     }
 
     $plugin = new SefrelShopPlugin();
-
-    $result = $plugin->syncTracking(
-        $order
-    );
+    $result = $plugin->syncTracking($order);
 
     echo '<pre>';
-
     echo esc_html(
         wp_json_encode(
             $result,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
         )
     );
-
     echo '</pre>';
 
     exit;
 }
 
-add_action(
-    'init',
-    'sefrelshop_register_delivery_confirmation'
-);
+/*
+|--------------------------------------------------------------------------
+| Delivery Confirmation
+|--------------------------------------------------------------------------
+*/
+
+add_action('init', 'sefrelshop_register_delivery_confirmation');
 
 function sefrelshop_register_delivery_confirmation(): void
 {
@@ -319,14 +281,10 @@ function sefrelshop_register_delivery_confirmation(): void
 |--------------------------------------------------------------------------
 */
 
-add_action(
-    'init',
-    'sefrelshop_register_tracking_simulator'
-);
+add_action('init', 'sefrelshop_register_tracking_simulator');
 
 function sefrelshop_register_tracking_simulator(): void
 {
     $simulator = new SpeedafTrackingSimulator();
-
     $simulator->registerHooks();
 }
