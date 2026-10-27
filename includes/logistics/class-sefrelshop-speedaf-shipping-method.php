@@ -64,9 +64,17 @@ class SefrelShop_Speedaf_Shipping_Method extends WC_Shipping_Method
 
 
 
+
 public function calculate_shipping($package = [])
 {
+    $log = static function ($message) {
+        error_log('[SefrelShop Speedaf Diagnostic] ' . $message);
+    };
+
+    $log('Calculation started.');
+
     if ($this->enabled !== 'yes') {
+        $log('STOP: Shipping method is disabled.');
         return;
     }
 
@@ -75,49 +83,61 @@ public function calculate_shipping($package = [])
         !class_exists('SefrelShop_Shipment_Splitter') ||
         !class_exists('SefrelShop_Shipment_Pricing')
     ) {
+        $log('STOP: One or more required classes are not loaded.');
         return;
     }
 
     $contents = $package['contents'] ?? [];
 
     if (empty($contents) || !is_array($contents)) {
+        $log('STOP: Package contents are empty or invalid.');
         return;
     }
 
+    $destination = $package['destination'] ?? [];
 
-$destination = $package['destination'] ?? [];
+    $deliveryCity = sanitize_text_field($destination['city'] ?? '');
+    $deliveryState = sanitize_text_field($destination['state'] ?? '');
 
-$deliveryCity = sanitize_text_field(
-    $destination['city'] ?? ''
-);
-
-$deliveryState = sanitize_text_field(
-    $destination['state'] ?? ''
-);
-
-if ($deliveryCity === '' || $deliveryState === '') {
-    return;
-}
+    if ($deliveryCity === '' || $deliveryState === '') {
+        $log('STOP: Delivery city or state is missing. City=' .
+            $deliveryCity . '; State=' . $deliveryState);
+        return;
+    }
 
     try {
         $builder = new SefrelShop_Shipment_Item_Builder();
         $items = $builder->build($contents);
 
-        if (is_wp_error($items) || empty($items)) {
+        if (is_wp_error($items)) {
+            $log('STOP: Item builder returned WP_Error: ' .
+                $items->get_error_message());
             return;
         }
+
+        if (empty($items)) {
+            $log('STOP: Item builder returned no items.');
+            return;
+        }
+
+        $log('Items built successfully. Count=' . count($items));
 
         $splitter = new SefrelShop_Shipment_Splitter();
         $groups = $splitter->groupAndSplit($items);
 
         if (empty($groups)) {
+            $log('STOP: Shipment splitter returned no groups.');
             return;
         }
+
+        $log('Shipment groups created. Count=' . count($groups));
 
         $pricing = new SefrelShop_Shipment_Pricing();
         $totalAmount = 0.0;
 
-        foreach ($groups as $group) {
+        foreach ($groups as $index => $group) {
+            $log('Pricing group ' . ($index + 1) . '.');
+
             $result = $pricing->priceGroup(
                 $group,
                 $deliveryCity,
@@ -127,6 +147,9 @@ if ($deliveryCity === '' || $deliveryState === '') {
             $groupTotal = $result['total_amount'] ?? null;
 
             if (!is_numeric($groupTotal) || (float) $groupTotal <= 0) {
+                $log('STOP: Pricing returned an invalid total for group ' .
+                    ($index + 1) . '. Result=' .
+                    wp_json_encode($result));
                 return;
             }
 
@@ -134,6 +157,7 @@ if ($deliveryCity === '' || $deliveryState === '') {
         }
 
         if ($totalAmount <= 0) {
+            $log('STOP: Final shipping total is zero or negative.');
             return;
         }
 
@@ -143,17 +167,17 @@ if ($deliveryCity === '' || $deliveryState === '') {
             'cost'    => $totalAmount,
             'package' => $package,
         ]);
-    } catch (\Throwable $exception) {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(
-                '[SefrelShop Speedaf] Shipping calculation failed: ' .
-                $exception->getMessage()
-            );
-        }
 
+        $log('SUCCESS: Shipping rate added. Total=' . $totalAmount);
+
+    } catch (\Throwable $exception) {
+        $log('EXCEPTION: ' . get_class($exception) . ': ' .
+            $exception->getMessage() . ' in ' .
+            $exception->getFile() . ':' . $exception->getLine());
         return;
     }
 }
+
 
 
     /**
