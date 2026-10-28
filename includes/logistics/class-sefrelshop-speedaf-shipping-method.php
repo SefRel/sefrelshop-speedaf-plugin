@@ -104,6 +104,8 @@ public function calculate_shipping($package = [])
     $deliveryCity = sanitize_text_field($destination['city'] ?? '');
     $deliveryState = sanitize_text_field($destination['state'] ?? '');
 
+    $log('DIAGNOSTIC: Raw destination state=' . var_export($destination['state'] ?? null, true));
+
     if ($deliveryCity === '' || $deliveryState === '') {
         $log('STOP: Delivery city or state is missing. City=' .
             $deliveryCity . '; State=' . $deliveryState);
