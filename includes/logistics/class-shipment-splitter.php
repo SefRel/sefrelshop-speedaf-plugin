@@ -176,31 +176,34 @@ class SefrelShop_Shipment_Splitter
             );
         }
 
-        // Reject known oversized individual product dimensions.
-        // Final packed-parcel dimensions must still be checked separately.
-        foreach (['length_cm', 'width_cm', 'height_cm'] as $dimension) {
-            if (!array_key_exists($dimension, $item)) {
-                throw new InvalidArgumentException(
-                    "Missing parcel dimension: {$dimension}"
-                );
-            }
+        // Dimensions are optional for tariff calculation.
+// Validate dimensions only when a value has been provided.
+foreach (['length_cm', 'width_cm', 'height_cm'] as $dimension) {
+    if (!array_key_exists($dimension, $item)) {
+        $item[$dimension] = null;
+    }
 
-            if (
-                !is_numeric($item[$dimension]) ||
-                !is_finite((float) $item[$dimension]) ||
-                (float) $item[$dimension] <= 0 ||
-                (float) $item[$dimension] > self::MAX_PARCEL_DIMENSION_CM
-            ) {
-                throw new InvalidArgumentException(
-                    "Invalid or oversized product dimension: {$dimension}."
-                );
-            }
+    $value = $item[$dimension];
 
-            $item[$dimension] = (float) $item[$dimension];
-        }
+    // Missing or empty dimensions must not block checkout.
+    if ($value === null || $value === '' || $value === 0 || $value === 0.0) {
+        $item[$dimension] = null;
+        continue;
+    }
 
-        $item['pickup_state'] = $state;
-        $item['pickup_city']  = $city;
+    if (
+        !is_numeric($value) ||
+        !is_finite((float) $value) ||
+        (float) $value <= 0 ||
+        (float) $value > self::MAX_PARCEL_DIMENSION_CM
+    ) {
+        throw new InvalidArgumentException(
+            "Invalid or oversized product dimension: {$dimension}."
+        );
+    }
+
+    $item[$dimension] = (float) $value;
+}
 
         return $item;
     }
@@ -269,10 +272,10 @@ class SefrelShop_Shipment_Splitter
                     'unit_weight_kg'  => $item['unit_weight_kg'],
                     'weight_kg'       => $allocatedWeight,
                     'dimensions_cm'   => [
-                        'length' => $item['length_cm'],
-                        'width'  => $item['width_cm'],
-                        'height' => $item['height_cm'],
-                    ],
+                        'length' => $item['length_cm'] ?? null,
+                        'width'  => $item['width_cm'] ?? null,
+                        'height' => $item['height_cm'] ?? null,
+            ],
                 ];
 
                 $current['weight_kg'] = round(
