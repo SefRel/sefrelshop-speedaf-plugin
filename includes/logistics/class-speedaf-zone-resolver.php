@@ -209,140 +209,62 @@ class SpeedafZoneResolver
     /**
      * Normalize state names and supported aliases.
      */
-    private function normalizeState(string $state): string
-    {
-        $state = $this->normalize($state);
+   private function normalizeState(string $state): string
+{
+    $state = $this->normalize($state);
 
-        $aliases = [
+    $aliases = [
     // Federal Capital Territory
     'fc' => 'fct',
+    'abuja' => 'fct',
+    'federal capital territory' => 'fct',
+    'abuja federal capital territory' => 'fct',
     'f c t' => 'fct',
     'f.c.t.' => 'fct',
-    'abuja' => 'fct',
-    'abuja federal capital territory' => 'fct',
-    'federal capital territory' => 'fct',
 
-    // Abia
+    // All 36 states: WooCommerce code => normalized state name
     'ab' => 'abia',
-
-    // Adamawa
     'ad' => 'adamawa',
-
-    // Akwa Ibom
     'ak' => 'akwa ibom',
-    'akwa-ibom' => 'akwa ibom',
-
-    // Anambra
     'an' => 'anambra',
-
-    // Bauchi
     'ba' => 'bauchi',
-
-    // Bayelsa
     'by' => 'bayelsa',
-
-    // Benue
     'be' => 'benue',
-
-    // Borno
     'bo' => 'borno',
-
-    // Cross River
     'cr' => 'cross river',
-    'cross-river' => 'cross river',
-
-    // Delta
     'de' => 'delta',
-
-    // Ebonyi
     'eb' => 'ebonyi',
-
-    // Edo
     'ed' => 'edo',
-
-    // Ekiti
     'ek' => 'ekiti',
-
-    // Enugu
     'en' => 'enugu',
-
-    // Gombe
     'go' => 'gombe',
-
-    // Imo
     'im' => 'imo',
-
-    // Jigawa
     'ji' => 'jigawa',
-
-    // Kaduna
     'kd' => 'kaduna',
-
-    // Kano
     'kn' => 'kano',
-
-    // Katsina
     'kt' => 'katsina',
-
-    // Kebbi
     'ke' => 'kebbi',
-
-    // Kogi
     'ko' => 'kogi',
-
-    // Kwara
     'kw' => 'kwara',
-
-    // Lagos
     'la' => 'lagos',
-
-    // Nasarawa
     'na' => 'nasarawa',
-    'nassarawa' => 'nasarawa',
-
-    // Niger
     'ni' => 'niger',
-
-    // Ogun
     'og' => 'ogun',
-
-    // Ondo
     'on' => 'ondo',
-
-    // Osun
     'os' => 'osun',
-
-    // Oyo
     'oy' => 'oyo',
-
-    // Plateau
     'pl' => 'plateau',
-
-    // Rivers
     'ri' => 'rivers',
-    'river state' => 'rivers',
-
-    // Sokoto
     'so' => 'sokoto',
-
-    // Taraba
     'ta' => 'taraba',
-
-    // Yobe
     'yo' => 'yobe',
-
-    // Zamfara
     'za' => 'zamfara',
+
+    // Common full-name variations
+    'nassarawa' => 'nasarawa',
+    'river state' => 'rivers',
 ];
 
-        return $aliases[$state] ?? $state;
-    }
-
-    /**
-     * Return a normalized state name for comparison.
-     */
-    public function normalizeStateForComparison(string $state): string
-    {
-        return $this->normalizeState($state);
-    }
+    return $aliases[$state] ?? $state;
+}
 }
