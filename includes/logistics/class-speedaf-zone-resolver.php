@@ -337,4 +337,12 @@ class SpeedafZoneResolver
 
         return $aliases[$state] ?? $state;
     }
+
+    /**
+     * Return a normalized state name for comparison.
+     */
+    public function normalizeStateForComparison(string $state): string
+    {
+        return $this->normalizeState($state);
+    }
 }

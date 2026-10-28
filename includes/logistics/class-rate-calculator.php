@@ -182,22 +182,27 @@ private function isValidTariff(array $tariff): bool
             );
         }
 
-        // Use the higher-numbered pickup/delivery zone.
-        $zone = max($pickupZone, $deliveryZone);
+        // Same-state pricing is handled in Shipment_Pricing,
+// where the normalized pickup and delivery states are available.
+$zone = max($pickupZone, $deliveryZone);
 
-        // Round upward to the next 0.5 kg tariff band.
-       $halfKgUnits = (int) ceil(($weight * 2) - 1e-9);
+// Round upward to the next 0.5 kg tariff band.
+$halfKgUnits = (int) ceil(($weight * 2) - 1e-9);
 $billableWeight = $halfKgUnits / 2;
+
+// The supplied tariff table is keyed by whole kilograms.
+// Use the next whole-kilogram row for fractional weights.
+$tariffWeight = (int) ceil($billableWeight);
 
 $tariff = $this->getTariff();
 
-if (!isset($tariff[$halfKgUnits][$zone - 1])) {
+if (!isset($tariff[$tariffWeight][$zone - 1])) {
     throw new InvalidArgumentException(
         'No tariff exists for the calculated weight band and zone.'
     );
 }
 
-$baseAmount = (int) $tariff[$halfKgUnits][$zone - 1];
+$baseAmount = (int) $tariff[$tariffWeight][$zone - 1];
         $vatAmount = (int) round($baseAmount * self::VAT_RATE);
         $finalAmount = $baseAmount + $vatAmount;
 

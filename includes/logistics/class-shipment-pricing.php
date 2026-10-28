@@ -76,6 +76,20 @@ public function priceGroup(
     );
 }
 
+// Same-state deliveries use Zone 1 tariff rates.
+$pickupState = $this->zoneResolver->normalizeStateForComparison(
+    (string) $group['pickup_state']
+);
+
+$deliveryStateNormalized = $this->zoneResolver->normalizeStateForComparison(
+    $deliveryState
+);
+
+if ($pickupState === $deliveryStateNormalized) {
+    $pickupZone = 1;
+    $deliveryZone = 1;
+}
+
     $pricedWaybills = [];
     $totalBase = 0;
     $totalVat = 0;
