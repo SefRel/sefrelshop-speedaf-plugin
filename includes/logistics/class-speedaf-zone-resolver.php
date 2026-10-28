@@ -152,31 +152,22 @@ class SpeedafZoneResolver
      * Known tariff cities use their explicit zone.
      * Other cities use the configured state fallback.
      */
-    public function resolveLocation(
-        string $city,
-        string $state
-    ): ?int {
-        $city = $this->normalize($city);
-        $state = $this->normalizeState($state);
 
-        if ($city === '' || $state === '') {
-            return null;
-        }
+public function resolveLocation(
+    string $city,
+    string $state
+): ?int {
+    $state = $this->normalizeState($state);
 
-        $knownCityState = self::CITY_STATES[$city] ?? null;
-
-        // Reject a known reference city paired with the wrong state.
-        if ($knownCityState !== null) {
-            if ($state !== $this->normalizeState($knownCityState)) {
-                return null;
-            }
-
-            return $this->resolveCity($city);
-        }
-
-        // Unlisted town: use its state's configured fallback zone.
-        return self::STATE_ZONES[$state] ?? null;
+    if ($state === '') {
+        return null;
     }
+
+    // State determines the tariff zone.
+    // City must not override or reject a valid state.
+    return self::STATE_ZONES[$state] ?? null;
+}
+
 
     /**
      * Resolve the tariff zone for a shipment.

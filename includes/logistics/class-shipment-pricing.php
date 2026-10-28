@@ -31,7 +31,7 @@ class SefrelShop_Shipment_Pricing
      *     'waybills' => [...]
      * ]
      */
-
+    /**
 /**
  * Price every waybill in one pickup-location group.
  */
