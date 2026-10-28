@@ -63,10 +63,18 @@ public function priceGroup(
     );
 
     if ($pickupZone === null || $deliveryZone === null) {
-        throw new InvalidArgumentException(
-            'Pickup or delivery location could not be mapped to a Speedaf tariff zone.'
-        );
-    }
+    throw new InvalidArgumentException(
+        sprintf(
+            'Zone resolution failed. Pickup: "%s, %s" (zone: %s). Delivery: "%s, %s" (zone: %s).',
+            $group['pickup_city'],
+            $group['pickup_state'],
+            $pickupZone === null ? 'unresolved' : $pickupZone,
+            $deliveryCity,
+            $deliveryState,
+            $deliveryZone === null ? 'unresolved' : $deliveryZone
+        )
+    );
+}
 
     $pricedWaybills = [];
     $totalBase = 0;
