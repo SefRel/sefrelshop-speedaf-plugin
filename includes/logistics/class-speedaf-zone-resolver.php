@@ -265,6 +265,11 @@ class SpeedafZoneResolver
     'river state' => 'rivers',
 ];
 
-    return $aliases[$state] ?? $state;
+       return $aliases[$state] ?? $state;
+}
+
+public function normalizeStateForComparison(string $state): string
+{
+    return $this->normalizeState($state);
 }
 }
