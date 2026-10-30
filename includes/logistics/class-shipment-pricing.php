@@ -76,18 +76,24 @@ public function priceGroup(
     );
 }
 
-// Same-state deliveries use Zone 1 tariff rates.
-$pickupState = $this->zoneResolver->normalizeStateForComparison(
-    (string) $group['pickup_state']
+// Determine the applicable tariff zone using the agreed Speedaf rules.
+$pickupCityNormalized = strtolower(
+    preg_replace('/\s+/', ' ', trim((string) $group['pickup_city']))
 );
 
-$deliveryStateNormalized = $this->zoneResolver->normalizeStateForComparison(
-    $deliveryState
+$deliveryCityNormalized = strtolower(
+    preg_replace('/\s+/', ' ', trim($deliveryCity))
 );
 
-if ($pickupState === $deliveryStateNormalized) {
-    $pickupZone = 1;
-    $deliveryZone = 1;
+if (
+    $pickupCityNormalized === $deliveryCityNormalized ||
+    $pickupZone === $deliveryZone
+) {
+    // Same city or same zone: Zone 1 tariff.
+    $tariffZone = 1;
+} else {
+    // Different zones: tariff depends on the distance between zones.
+    $tariffZone = abs($pickupZone - $deliveryZone) + 1;
 }
 
     $pricedWaybills = [];
@@ -109,8 +115,8 @@ if ($pickupState === $deliveryStateNormalized) {
         }
 
         $quote = $this->calculator->calculate([
-            'pickup_zone' => $pickupZone,
-            'delivery_zone' => $deliveryZone,
+            'pickup_zone' => $tariffZone,
+            'delivery_zone' => $tariffZone,
             'chargeable_weight_kg' => (float) $weight,
         ]);
 
@@ -131,6 +137,7 @@ if ($pickupState === $deliveryStateNormalized) {
         'pickup_state' => $group['pickup_state'],
         'delivery_city' => $deliveryCity,
         'delivery_state' => $deliveryState,
+        'tariff_zone' => $tariffZone,
         'pickup_zone' => $pickupZone,
         'delivery_zone' => $deliveryZone,
         'waybills' => $pricedWaybills,
