@@ -34,11 +34,18 @@ class SefrelShop_Shipping_Package_Label
     /**
      * Append unique effective pickup states to the vendor label.
      */
-   public function appendPickupStates(
+   public function appendPickupStates( 
     $shippingLabel,
     $packageIndex,
     $package
 ): string {
+
+        error_log('SEFRELSHOP: Dokan shipping label callback executed.');
+
+        error_log(
+            'SEFRELSHOP: Package data: ' . print_r($package, true)
+        );
+
         $vendorId = absint($package['seller_id'] ?? 0);
 
         if ($vendorId <= 0 || empty($package['contents'])) {

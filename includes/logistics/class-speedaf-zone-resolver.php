@@ -152,8 +152,7 @@ class SpeedafZoneResolver
      * Known tariff cities use their explicit zone.
      * Other cities use the configured state fallback.
      */
-
-public function resolveLocation(
+        public function resolveLocation(
     string $city,
     string $state
 ): ?int {
